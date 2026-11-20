@@ -1,0 +1,58 @@
+{
+  "name": "backendmascotas",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/src/functions/graphql.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/main.js",
+    "dev": "tsx watch main.ts",
+    "start:ts": "tsx main.ts",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:studio": "prisma studio",
+    "azure:start": "func start",
+    "azure:dev": "pnpm run build && func start",
+    "postinstall": "prisma generate",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devEngines": {
+    "packageManager": {
+      "name": "pnpm",
+      "version": "12.21.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@12.21.0",
+  "type": "module",
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
+    "@typescript/native": "npm:typescript@7.0.2",
+    "azure-functions-core-tools": "^4.16.1",
+    "eslint": "^10.15.0",
+    "globals": "^17.14.0",
+    "prisma": "7.10.1",
+    "tsx": "^4.23.15",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "typescript-eslint": "^8.73.0",
+    "vitest": "^5.1.1"
+  },
+  "dependencies": {
+    "@apollo/server": "5.5.2",
+    "@as-integrations/azure-functions": "0.3.0",
+    "@azure/functions": "4.17.1",
+    "@prisma/adapter-pg": "7.10.1",
+    "@prisma/client": "7.10.1",
+    "dotenv": "^18.0.10",
+    "graphql": "^16.15.0",
+    "pg": "^8.23.1"
+  }
+}
