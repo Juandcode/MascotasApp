@@ -17,6 +17,7 @@ Generator.
 | Scalars          | `graphql-scalars` (`DateTime`)                                |
 | ORM / database   | Prisma 7 (`prisma-client`, ESM) + `@prisma/adapter-pg`        |
 | Database         | PostgreSQL                                                    |
+| Object storage   | Tigris (`@tigrisdata/storage`, S3-compatible)                 |
 | Serverless       | Azure Functions 4 (`@azure/functions`)                        |
 | Tests            | Vitest                                                        |
 | Linter           | ESLint + typescript-eslint                                    |
@@ -28,7 +29,8 @@ Generator.
 backendmascotas/
 ├── main.ts                      # Standalone Apollo server; defines MyContext { db }
 ├── lib/
-│   └── prisma.ts                # PrismaClient + pg adapter and .env loading
+│   ├── prisma.ts                # PrismaClient + pg adapter and .env loading
+│   └── tigris.ts                # Tigris upload helper (S3-compatible bucket)
 ├── src/
 │   ├── graphql/
 │   │   ├── schema.graphql       # GraphQL SDL (source of truth, DateTime scalar)
@@ -37,8 +39,11 @@ backendmascotas/
 │   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.pet)
 │   │   └── mutations/PetMutation.ts  # createPet (context.db.pet)
 │   ├── functions/
+│   │   ├── index.ts             # Azure Functions entrypoint (registers both functions)
 │   │   ├── handler.ts           # Loads the SDL and supplies the Prisma context
-│   │   └── graphql.ts           # HTTP function definition "graphql"
+│   │   ├── graphql.ts           # HTTP function definition "graphql"
+│   │   ├── uploadHandler.ts     # Image validation + Tigris upload
+│   │   └── upload.ts            # HTTP function definition "upload"
 │   └── generated/
 │       ├── graphql.ts           # Schema/resolver types from codegen (committed)
 │       └── prisma/              # Generated Prisma client (do not edit, gitignored)
@@ -49,6 +54,7 @@ backendmascotas/
 │   └── copy-sdl.mjs             # Copies schema.graphql into dist/ during build
 ├── tests/
 │   ├── pet.test.ts              # Unit tests for queries/mutations
+│   ├── upload.test.ts           # Unit tests for the upload endpoint
 │   └── azure-function.test.ts   # HTTP handler integration test
 ├── codegen.yml                  # GraphQL Code Generator configuration
 ├── host.json                    # Azure Functions configuration
@@ -64,6 +70,7 @@ backendmascotas/
 - Node.js (a version compatible with ESM and `@types/node` 26.x)
 - pnpm 12.21.0 (`corepack` or `npm i -g pnpm@12.21.0`)
 - PostgreSQL reachable through `DATABASE_URL`
+- Tigris bucket credentials for the upload endpoint (`S3_*` variables)
 
 ## Installation
 
@@ -112,13 +119,21 @@ Create a `.env` file at the repository root (it is not committed):
 
 ```env
 DATABASE_URL=postgres://usuario:password@host:5432/mascotas?sslmode=require
+
+S3_ENDPOINT=https://t3.storage.dev
+S3_BUCKET=tu-bucket
+S3_ACCESS_KEY_ID=tu-access-key
+S3_SECRET_ACCESS_KEY=tu-secret-key
 ```
 
 - `lib/prisma.ts` throws if `DATABASE_URL` is not set.
 - `prisma7.config.ts` reads `DATABASE_URL` through `env()` and is loaded
   automatically by Prisma.
-- To run Azure Functions locally, `local.settings.json` must include
-  `DATABASE_URL` inside `Values`. This file is in `.gitignore` because it can
+- `lib/tigris.ts` reads the `S3_*` variables lazily. `S3_ENDPOINT` defaults to
+  `https://t3.storage.dev`; the bucket and credentials are required for the
+  upload endpoint.
+- To run Azure Functions locally, `local.settings.json` must include the same
+  variables inside `Values`. This file is in `.gitignore` because it can
   contain credentials.
 
 ## Scripts
@@ -242,6 +257,51 @@ Notes:
 - Resolver signatures are typed from the generated `QueryResolvers` /
   `MutationResolvers`, so run `pnpm generate` after changing the SDL.
 
+## File uploads
+
+Uploads are handled out-of-band from GraphQL, the approach Apollo recommends.
+The Azure Functions integration only parses JSON bodies, so a GraphQL `Upload`
+scalar would not reach the server; instead there is a dedicated HTTP endpoint
+that validates the file and uploads it with `@tigrisdata/storage`.
+
+The endpoint runs in the Azure Functions host (`pnpm azure:dev` or
+`pnpm build && pnpm azure:start`), not in the standalone `pnpm dev` server.
+
+`POST /api/upload` (`authLevel: "function"`, `multipart/form-data`):
+
+- Field name: `file`.
+- Allowed image types: JPEG, PNG, GIF, and WebP. The declared MIME type must
+  match the file signature (magic bytes).
+- Maximum size: 15 MB (`15 * 1024 * 1024`).
+- Files are uploaded to the configured Tigris bucket with the key
+  `uploads/<uuid>.<ext>` using `@tigrisdata/storage`.
+- Objects are uploaded with public access and a one-year immutable
+  `Cache-Control`; the response includes the public `url`.
+- Credentials come from `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
+  `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` (see
+  [Environment variables](#environment-variables)).
+
+```bash
+curl -X POST "http://localhost:7071/api/upload?code=<function-key>" \
+  -F "file=@mascota.png"
+```
+
+Successful response (`201`):
+
+```json
+{
+  "filename": "259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "key": "uploads/259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "url": "https://<bucket>.t3.storage.dev/uploads/259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "size": 1024,
+  "mimetype": "image/png"
+}
+```
+
+Invalid requests return `400` with `{ "error": "..." }` for a missing file,
+non-image or spoofed content, or a file over 15 MB. Storage failures return
+`500` with a generic message; the underlying error is logged server-side.
+
 ## Local run
 
 Standalone server (default port 5000, `PORT` variable):
@@ -276,20 +336,24 @@ pnpm test
 ```
 
 Tests live in `tests/`. `pet.test.ts` covers the `Pet` queries and mutations
-with a mocked `{ db }` context, and `azure-function.test.ts` sends a real
-GraphQL request through the Functions handler.
+with a mocked `{ db }` context, `upload.test.ts` covers image validation and
+storage with a mocked `@tigrisdata/storage` client, and
+`azure-function.test.ts` sends a real GraphQL request through the Functions
+handler.
 
 ## Deploying to Azure Functions
 
 1. Build: `pnpm build`. This compiles to `dist/` and copies the SDL to
    `dist/src/graphql/schema.graphql`.
-2. Set `DATABASE_URL` in the Function App configuration. The handler creates
-   the Prisma client and exposes it to resolvers through the GraphQL context.
+2. Set `DATABASE_URL` and the `S3_*` variables in the Function App
+   configuration. The handler creates the Prisma client and exposes it to
+   resolvers through the GraphQL context; the upload endpoint uses Tigris.
 3. `host.json` uses version 2.0; the Node runtime is set with
    `FUNCTIONS_WORKER_RUNTIME: "node"` in `local.settings.json` (local) or in
    the application settings (Azure).
-4. The function entrypoint is `dist/src/functions/graphql.js`
-   (`main` field in `package.json`).
+4. The function entrypoint is `dist/src/functions/index.js`
+   (`main` field in `package.json`). It imports and registers both the
+   `graphql` and `upload` functions.
 5. Make sure the deployment package includes the `dist/` output from the build
    (the Functions host loads the compiled handler and the copied SDL).
 
@@ -312,5 +376,12 @@ GraphQL request through the Functions handler.
 - Azure Functions loads the compiled output, so run `pnpm build` before
   `func start` or deploying; otherwise `dist/` and the copied SDL may be
   missing or stale.
+- Uploads require network access to Tigris and valid `S3_*` credentials; a
+  missing variable or storage error makes `POST /api/upload` return `500`.
+- Objects are uploaded as public by default. If the bucket policy forbids
+  public access, adjust `lib/tigris.ts` and serve private objects with signed
+  URLs instead.
+- Uploads are not persisted in PostgreSQL: the database stores no image key or
+  URL yet.
 - `azure-functions-core-tools` downloads the Core Tools binary on its first
   run; the first `func start` can take a while.

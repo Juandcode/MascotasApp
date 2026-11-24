@@ -11,7 +11,9 @@ skill.
 
 `backendmascotas` is a GraphQL pets API built with Apollo Server and Prisma ORM
 on PostgreSQL, deployed to Azure Functions. The current domain is a single
-`Pet` entity with a basic CRUD (list, get by id, and create).
+`Pet` entity with a basic CRUD (list, get by id, and create), plus a dedicated
+HTTP endpoint that validates image uploads and stores them in Tigris
+(S3-compatible object storage).
 
 ## Stack and versions
 
@@ -21,6 +23,7 @@ on PostgreSQL, deployed to Azure Functions. The current domain is a single
 - GraphQL Code Generator (`@graphql-codegen/cli` 8,
   `typescript`/`typescript-resolvers`) and `graphql-scalars` (`DateTime`).
 - Prisma 7.10.1 with `@prisma/adapter-pg` (PostgreSQL).
+- `@tigrisdata/storage` 3.25.0 for image uploads to a Tigris bucket.
 - Azure Functions 4 (`@azure/functions` 4.17.1) and
   `@as-integrations/azure-functions` 0.3.0.
 - Vitest for tests, ESLint + typescript-eslint for lint.
@@ -52,9 +55,19 @@ pnpm azure:dev        # build + func start
   integration (`startServerAndCreateHandler`). It resolves the SDL relative to
   its own module (`new URL("../graphql/schema.graphql", import.meta.url)`)
   and supplies the context factory `{ db: prisma }`, matching `main.ts`.
+- `src/functions/index.ts`: Azure Functions entrypoint (`main` in
+  `package.json`); it imports `graphql.ts` and `upload.ts` so both functions
+  are registered.
 - `src/functions/graphql.ts`: registers the HTTP function `graphql`
   (`GET/POST`, route `graphql`, `authLevel: "function"`), available at
   `/api/graphql`.
+- `src/functions/upload.ts`: registers the HTTP function `upload`
+  (`POST`, route `upload`, `authLevel: "function"`), available at
+  `/api/upload`.
+- `src/functions/uploadHandler.ts`: validates uploaded images and sends them to
+  Tigris through `lib/tigris.ts`. It accepts `multipart/form-data` with a `file`
+  field, allows JPEG/PNG/GIF/WebP up to 15 MB, verifies magic bytes, and uses a
+  UUID filename under `uploads/`.
 - `src/graphql/schema.graphql`: GraphQL SDL, the source of truth (includes
   `scalar DateTime`).
 - `src/graphql/index.ts`: resolver map (`Query`, `Mutation`, `DateTime`) using
@@ -71,6 +84,10 @@ pnpm azure:dev        # build + func start
   gitignored).
 - `lib/prisma.ts`: single `PrismaClient` instance with `PrismaPg` and `.env`
   loading via `dotenv/config`.
+- `lib/tigris.ts`: `uploadImage()` wrapper around `@tigrisdata/storage` `put()`;
+  reads `S3_BUCKET`, `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and
+  `S3_ENDPOINT` lazily, uploads public objects with a UUID key, and returns
+  `{ key, url, size, mimetype }`.
 - `prisma7.config.ts`: Prisma 7 config (schema, migrations, datasource URL).
 - `scripts/copy-sdl.mjs`: copies `schema.graphql` to
   `dist/src/graphql/schema.graphql` as part of `pnpm build`, so the compiled
@@ -79,6 +96,10 @@ pnpm azure:dev        # build + func start
 
 Request flow: HTTP `/api/graphql` -> `graphqlHandler` -> Apollo Server
 -> resolvers (GraphQL context `{ db }`) -> `context.db.pet` -> PostgreSQL.
+
+Upload flow: HTTP `/api/upload` -> `uploadHandler` -> `request.formData()`
+-> validation -> `lib/tigris.ts` -> `@tigrisdata/storage` `put()` ->
+`uploads/<uuid>.<ext>` in the Tigris bucket.
 
 ## Required conventions
 
@@ -90,15 +111,22 @@ Request flow: HTTP `/api/graphql` -> `graphqlHandler` -> Apollo Server
 - Change the SDL in `src/graphql/schema.graphql` and run `pnpm generate`;
   resolver signatures come from `src/generated/graphql.ts`.
 - Do not edit `src/generated/graphql.ts`, `src/generated/prisma/`, or `dist/`.
+- Uploads: keep uploads out-of-band from GraphQL (Azure Functions only parses
+  JSON bodies), accept only images up to 15 MB, verify the content signature,
+  generate UUID filenames, and never trust client filenames.
+- Uploads go through `lib/tigris.ts`; do not import `@tigrisdata/storage`
+  directly from handlers or resolvers. Never hardcode bucket credentials.
 - Follow ESLint rules (`no-unused-vars` ignores arguments that start with `_`).
 
 ## Secrets and configuration
 
 - `DATABASE_URL` is required. Use `.env` locally.
+- `S3_BUCKET`, `S3_ACCESS_KEY_ID`, and `S3_SECRET_ACCESS_KEY` are required for
+  uploads; `S3_ENDPOINT` defaults to `https://t3.storage.dev`.
 - `.env` and `local.settings.json` are in `.gitignore`. Never commit
   credentials or connection strings.
-- `local.settings.json` may contain a real `DATABASE_URL`; do not display it
-  or copy it into code or docs.
+- `local.settings.json` may contain a real `DATABASE_URL` and real `S3_*`
+  credentials; do not display them or copy them into code or docs.
 
 ## Tests
 
@@ -107,6 +135,9 @@ Request flow: HTTP `/api/graphql` -> `graphqlHandler` -> Apollo Server
   delegate is mocked (e.g. `{ db: { pet: delegate } }`).
 - For the HTTP handler, build a `Request` and assert the response (see
   `tests/azure-function.test.ts`).
+- For uploads, build a `FormData` request, set dummy `S3_*` env vars before
+  importing the handler, and mock `@tigrisdata/storage` `put()` (see
+  `tests/upload.test.ts`). Do not require real credentials in tests.
 - Run `pnpm test` before considering a change done.
 - The handler test sets a dummy `DATABASE_URL` before importing the handler so
   the Prisma context can be constructed without a real database.
@@ -159,6 +190,12 @@ delivery.
   stale.
 - `src/graphql/schema.ts` is a commented-out legacy file; do not add schema
   changes there.
+- Uploads depend on Tigris availability and valid `S3_*` credentials; missing
+  configuration or a storage error makes `POST /api/upload` return `500`.
+- Objects are uploaded with public access. If the bucket forbids public objects,
+  change `lib/tigris.ts` to private access and return signed URLs.
+- Uploads are not persisted in PostgreSQL yet (no image key/URL columns on
+  `Pet`).
 - `azure-functions-core-tools` downloads the Core Tools binary on its first
   run; the first `func start` can take a while.
 
