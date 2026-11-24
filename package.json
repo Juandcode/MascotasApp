@@ -4,7 +4,7 @@
   "description": "",
   "main": "dist/src/functions/graphql.js",
   "scripts": {
-    "build": "tsc",
+    "build": "tsc && node scripts/copy-sdl.mjs",
     "start": "node dist/main.js",
     "dev": "tsx watch main.ts",
     "start:ts": "tsx main.ts",

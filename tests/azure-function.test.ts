@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { graphqlHandler } from "../src/functions/handler.ts";
+
+process.env.DATABASE_URL ??= "postgres://user:pass@localhost:5432/test";
+
+const { graphqlHandler } = await import("../src/functions/handler.ts");
 
 const context = {
   error: () => undefined,
