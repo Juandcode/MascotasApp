@@ -17,7 +17,8 @@
     "azure:dev": "pnpm run build && func start",
     "postinstall": "prisma generate",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "generate": "gql-gen --config codegen.yml"
   },
   "keywords": [],
   "author": "",
@@ -33,12 +34,16 @@
   "type": "module",
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@graphql-codegen/cli": "^8.0.0",
+    "@graphql-codegen/typescript": "^7.0.1",
+    "@graphql-codegen/typescript-resolvers": "^7.0.1",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "@typescript/native": "npm:typescript@7.0.2",
     "azure-functions-core-tools": "^4.16.1",
     "eslint": "^10.15.0",
     "globals": "^17.14.0",
+    "graphql-codegen-typescript-common": "0.18.2",
     "prisma": "7.10.1",
     "tsx": "^4.23.15",
     "typescript": "npm:@typescript/typescript6@6.0.2",
@@ -53,6 +58,7 @@
     "@prisma/client": "7.10.1",
     "dotenv": "^18.0.10",
     "graphql": "^16.15.0",
+    "graphql-scalars": "^2.0.1",
     "pg": "^8.23.1"
   }
 }
