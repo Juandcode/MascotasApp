@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 process.env.DATABASE_URL ??= "postgres://user:pass@localhost:5432/test";
 
-const { graphqlHandler } = await import("../src/functions/handler.ts");
+const { graphqlHandler } = await import("../src/server/functions/handler.ts");
 
 const context = {
   error: () => undefined,

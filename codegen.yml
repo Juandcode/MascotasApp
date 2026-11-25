@@ -1,5 +1,5 @@
 overwrite: true
-schema: "src/graphql/schema.graphql"
+schema: "src/server/graphql/schema.graphql"
 documents: null
 generates:
   src/generated/graphql.ts:
@@ -8,8 +8,9 @@ generates:
       - "typescript-resolvers"
     config:
       useIndexSignature: true
-      contextType: "../../main.ts#MyContext"
+      contextType: "../server/context.ts#MyContext"
       scalars:
         DateTime: Date
       mappers:
         Pet: "./prisma/client.ts#Pet as PetModel"
+        User: "./prisma/client.ts#User as UserModel"

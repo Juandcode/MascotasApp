@@ -1,10 +1,10 @@
 # backendmascotas
 
-GraphQL API for pet management. It exposes queries and mutations over a
-PostgreSQL database through Apollo Server and Prisma ORM, and it can run both
-as a standalone Node server and as an Azure Function. The GraphQL SDL is the
-source of truth and TypeScript resolver types are generated with GraphQL Code
-Generator.
+GraphQL API for pet management. It exposes queries and mutations for pets and
+their owners over a PostgreSQL database through Apollo Server and Prisma ORM,
+and it can run both as a standalone Express server and as an Azure Function.
+The GraphQL SDL is the source of truth and TypeScript resolver types are
+generated with GraphQL Code Generator.
 
 ## Stack
 
@@ -13,6 +13,8 @@ Generator.
 | Language         | TypeScript (ESM, `NodeNext`, `strict`)                        |
 | Runtime          | Node.js                                                       |
 | API              | Apollo Server 5 + GraphQL 16                                  |
+| HTTP server      | Express 5 + `@as-integrations/express5`                       |
+| Upload parsing   | `multer` (memory storage)                                     |
 | Schema / types   | GraphQL Code Generator (`typescript`, `typescript-resolvers`) |
 | Scalars          | `graphql-scalars` (`DateTime`)                                |
 | ORM / database   | Prisma 7 (`prisma-client`, ESM) + `@prisma/adapter-pg`        |
@@ -27,33 +29,44 @@ Generator.
 
 ```
 backendmascotas/
-├── main.ts                      # Standalone Apollo server; defines MyContext { db }
-├── lib/
-│   ├── prisma.ts                # PrismaClient + pg adapter and .env loading
-│   └── tigris.ts                # Tigris upload helper (S3-compatible bucket)
+├── main.ts                      # Bootstrap: config, listen, graceful shutdown
 ├── src/
-│   ├── graphql/
-│   │   ├── schema.graphql       # GraphQL SDL (source of truth, DateTime scalar)
-│   │   ├── schema.ts            # Legacy commented-out typeDefs (unused)
-│   │   ├── index.ts             # Resolver map + DateTimeResolver
-│   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.pet)
-│   │   └── mutations/PetMutation.ts  # createPet (context.db.pet)
-│   ├── functions/
-│   │   ├── index.ts             # Azure Functions entrypoint (registers both functions)
-│   │   ├── handler.ts           # Loads the SDL and supplies the Prisma context
-│   │   ├── graphql.ts           # HTTP function definition "graphql"
-│   │   ├── uploadHandler.ts     # Image validation + Tigris upload
-│   │   └── upload.ts            # HTTP function definition "upload"
+│   ├── server/
+│   │   ├── app.ts               # Express + Apollo wiring and middleware
+│   │   ├── config.ts            # Server config validation (PORT, uploads)
+│   │   ├── context.ts           # GraphQL context type (MyContext)
+│   │   ├── graphql/
+│   │   │   ├── schema.graphql   # GraphQL SDL (source of truth, DateTime scalar)
+│   │   │   ├── schema.ts        # Legacy commented-out typeDefs (unused)
+│   │   │   ├── index.ts         # Resolver map + DateTimeResolver
+│   │   │   ├── loggingPlugin.ts # Apollo plugin for console/App Insights logs
+│   │   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.pet)
+│   │   │   ├── queries/UserQuery.ts # getUsers / getUser (context.db.user)
+│   │   │   ├── mutations/PetMutation.ts  # createPet (context.db.pet)
+│   │   │   └── mutations/UserMutation.ts # createUser (context.db.user)
+│   │   ├── infrastructure/
+│   │   │   ├── prisma.ts        # PrismaClient + pg adapter and .env loading
+│   │   │   └── tigris.ts        # Tigris upload helper (S3-compatible bucket)
+│   │   ├── uploads/
+│   │   │   ├── imageUpload.ts   # Shared validation + Tigris upload logic
+│   │   │   └── uploadRouter.ts  # Standalone POST /api/upload route
+│   │   └── functions/
+│   │       ├── index.ts         # Azure Functions entrypoint (registers both functions)
+│   │       ├── handler.ts       # Loads the SDL and supplies the Prisma context
+│   │       ├── graphql.ts       # HTTP function definition "graphql"
+│   │       ├── uploadHandler.ts # Azure HTTP adapter for the shared upload logic
+│   │       └── upload.ts        # HTTP function definition "upload"
 │   └── generated/
 │       ├── graphql.ts           # Schema/resolver types from codegen (committed)
 │       └── prisma/              # Generated Prisma client (do not edit, gitignored)
 ├── prisma/
-│   ├── schema.prisma            # Data model (Pet)
+│   ├── schema.prisma            # Data model (User, Pet)
 │   └── migrations/              # SQL migrations
 ├── scripts/
 │   └── copy-sdl.mjs             # Copies schema.graphql into dist/ during build
 ├── tests/
-│   ├── pet.test.ts              # Unit tests for queries/mutations
+│   ├── pet.test.ts              # Unit tests for pet queries/mutations
+│   ├── user.test.ts             # Unit tests for user queries/mutations
 │   ├── upload.test.ts           # Unit tests for the upload endpoint
 │   └── azure-function.test.ts   # HTTP handler integration test
 ├── codegen.yml                  # GraphQL Code Generator configuration
@@ -86,7 +99,7 @@ pnpm prisma:generate
 ```
 
 The GraphQL resolver types (`src/generated/graphql.ts`) are committed, but they
-must be regenerated after editing `src/graphql/schema.graphql`:
+must be regenerated after editing `src/server/graphql/schema.graphql`:
 
 ```bash
 pnpm generate
@@ -99,13 +112,13 @@ There are two independent generation steps:
 | Source                     | Command               | Output                            |
 | -------------------------- | --------------------- | --------------------------------- |
 | `prisma/schema.prisma`     | `pnpm prisma:generate`| `src/generated/prisma/`           |
-| `src/graphql/schema.graphql` | `pnpm generate`     | `src/generated/graphql.ts`        |
+| `src/server/graphql/schema.graphql` | `pnpm generate`     | `src/generated/graphql.ts`        |
 
 `codegen.yml` configures GraphQL Code Generator to:
 
 - generate schema and resolver types with `typescript` and
   `typescript-resolvers`;
-- use `MyContext` (from `main.ts`) as the resolver context type;
+- use `MyContext` (from `src/server/context.ts`) as the resolver context type;
 - map the GraphQL `Pet` type to the Prisma `Pet` model;
 - map the `DateTime` scalar to JavaScript `Date`.
 
@@ -126,12 +139,15 @@ S3_ACCESS_KEY_ID=tu-access-key
 S3_SECRET_ACCESS_KEY=tu-secret-key
 ```
 
-- `lib/prisma.ts` throws if `DATABASE_URL` is not set.
+- `src/server/infrastructure/prisma.ts` throws if `DATABASE_URL` is not set.
 - `prisma7.config.ts` reads `DATABASE_URL` through `env()` and is loaded
   automatically by Prisma.
-- `lib/tigris.ts` reads the `S3_*` variables lazily. `S3_ENDPOINT` defaults to
+- `src/server/infrastructure/tigris.ts` reads the `S3_*` variables lazily. `S3_ENDPOINT` defaults to
   `https://t3.storage.dev`; the bucket and credentials are required for the
   upload endpoint.
+- `APPLICATIONINSIGHTS_CONNECTION_STRING` is optional. When set in Azure
+  Functions, the host forwards `console.log`/`console.error` output to
+  Application Insights; no SDK is required in this project.
 - To run Azure Functions locally, `local.settings.json` must include the same
   variables inside `Values`. This file is in `.gitignore` because it can
   contain credentials.
@@ -160,12 +176,20 @@ S3_SECRET_ACCESS_KEY=tu-secret-key
 Current model in `prisma/schema.prisma`:
 
 ```prisma
+model User {
+  id   String @id @default(uuid())
+  name String
+  pets Pet[]
+}
+
 model Pet {
   id        Int      @id @default(autoincrement())
   name      String
   species   String
   age       Int?
   createdAt DateTime @default(now())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
 }
 ```
 
@@ -185,10 +209,16 @@ pnpm prisma:generate  # regenerates the client
 
 ## GraphQL API
 
-The SDL lives in `src/graphql/schema.graphql`:
+The SDL lives in `src/server/graphql/schema.graphql`:
 
 ```graphql
 scalar DateTime
+
+type User {
+  id: ID!
+  name: String!
+  pets: [Pet!]!
+}
 
 type Pet {
   id: ID!
@@ -196,6 +226,7 @@ type Pet {
   species: String!
   age: Int
   createdAt: DateTime!
+  user: User
 }
 
 input CreatePetInput {
@@ -204,13 +235,20 @@ input CreatePetInput {
   age: Int
 }
 
+input CreateUserInput {
+  name: String!
+}
+
 type Query {
   pets: [Pet!]!
   pet(id: ID!): Pet
+  users: [User!]!
+  user(id: ID!): User
 }
 
 type Mutation {
   createPet(input: CreatePetInput!): Pet!
+  createUser(input: CreateUserInput!): User!
 }
 ```
 
@@ -248,12 +286,15 @@ Notes:
 - `DateTime` is implemented with `DateTimeResolver` from `graphql-scalars` and
   is serialized as an ISO-8601 string.
 - Resolvers receive the GraphQL context `MyContext` (`{ db: PrismaClient }`,
-  declared in `main.ts`) and query through `context.db.pet`. They do not import
-  `prisma` directly. Both `main.ts` and the Azure Functions handler supply
-  `{ db: prisma }`.
-- `getPets` sorts by `createdAt` descending.
+  declared in `src/server/context.ts`) and query through `context.db.pet` or
+  `context.db.user`. They do not import `prisma` directly. Both
+  `src/server/app.ts` and the Azure Functions handler supply `{ db: prisma }`.
+- `getPets` sorts by `createdAt` descending and includes each pet's user.
 - `getPet` converts `id` (GraphQL `ID`, a string) to a number and throws a
   `GraphQLError` with code `BAD_USER_INPUT` when it is not an integer.
+- `getUsers` sorts by name ascending and includes each user's pets; `getUser`
+  looks users up by their UUID.
+- `Pet.user` is nullable because `Pet.userId` is optional in the database.
 - Resolver signatures are typed from the generated `QueryResolvers` /
   `MutationResolvers`, so run `pnpm generate` after changing the SDL.
 
@@ -262,12 +303,9 @@ Notes:
 Uploads are handled out-of-band from GraphQL, the approach Apollo recommends.
 The Azure Functions integration only parses JSON bodies, so a GraphQL `Upload`
 scalar would not reach the server; instead there is a dedicated HTTP endpoint
-that validates the file and uploads it with `@tigrisdata/storage`.
+on both the standalone Express server and the Azure Functions host.
 
-The endpoint runs in the Azure Functions host (`pnpm azure:dev` or
-`pnpm build && pnpm azure:start`), not in the standalone `pnpm dev` server.
-
-`POST /api/upload` (`authLevel: "function"`, `multipart/form-data`):
+`POST /api/upload` (`multipart/form-data`; `authLevel: "function"` in Azure):
 
 - Field name: `file`.
 - Allowed image types: JPEG, PNG, GIF, and WebP. The declared MIME type must
@@ -280,6 +318,17 @@ The endpoint runs in the Azure Functions host (`pnpm azure:dev` or
 - Credentials come from `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
   `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` (see
   [Environment variables](#environment-variables)).
+- Validation lives in `src/server/uploads/imageUpload.ts` and is shared by the
+  standalone Express route and the Azure Functions adapter.
+
+Standalone server:
+
+```bash
+curl -X POST "http://localhost:5000/api/upload" \
+  -F "file=@mascota.png"
+```
+
+Azure Functions:
 
 ```bash
 curl -X POST "http://localhost:7071/api/upload?code=<function-key>" \
@@ -323,8 +372,27 @@ pnpm azure:dev
 The HTTP function `graphql` is exposed at `POST/GET /api/graphql` with
 `authLevel: "function"`. Locally, the Functions host serves it at
 `http://localhost:7071/api/graphql`. The build also copies
-`src/graphql/schema.graphql` to `dist/src/graphql/schema.graphql`, which is
-where the handler reads it from.
+`src/server/graphql/schema.graphql` to
+`dist/src/server/graphql/schema.graphql`, which is where the handler reads it
+from.
+
+The standalone server exposes GraphQL on any path (including `/graphql`) and
+the upload route at `POST /api/upload`. It also exposes `GET /health` for
+readiness checks. `main.ts` only bootstraps the process; `src/server/app.ts`
+composes Express, Apollo, middleware, and routes.
+
+### Logs and Application Insights
+
+The standalone server and the Azure Functions handlers log with
+`console.log`/`console.error` using prefixes such as `[http]`, `[graphql]`,
+`[upload]`, and `[startup]`. In Azure Functions, set
+`APPLICATIONINSIGHTS_CONNECTION_STRING` in the Function App settings and the
+host will send those logs to Application Insights. No extra SDK or code is
+required.
+
+Logs include request method/path, operation names, durations, invocation IDs,
+upload key/size/MIME type, and error summaries. They never include credentials
+or file contents.
 
 `azure-functions-core-tools` is a dev dependency: on its first run it downloads
 the Core Tools binary, so the first `func start` can take several minutes.
@@ -335,23 +403,24 @@ the Core Tools binary, so the first `func start` can take several minutes.
 pnpm test
 ```
 
-Tests live in `tests/`. `pet.test.ts` covers the `Pet` queries and mutations
-with a mocked `{ db }` context, `upload.test.ts` covers image validation and
-storage with a mocked `@tigrisdata/storage` client, and
-`azure-function.test.ts` sends a real GraphQL request through the Functions
-handler.
+Tests live in `tests/`. `pet.test.ts` and `user.test.ts` cover the `Pet` and
+`User` queries and mutations with a mocked `{ db }` context, `upload.test.ts`
+covers image validation, storage, and the standalone Express route with a
+mocked `@tigrisdata/storage` client, and `azure-function.test.ts` sends a real
+GraphQL request through the Functions handler.
 
 ## Deploying to Azure Functions
 
 1. Build: `pnpm build`. This compiles to `dist/` and copies the SDL to
-   `dist/src/graphql/schema.graphql`.
-2. Set `DATABASE_URL` and the `S3_*` variables in the Function App
-   configuration. The handler creates the Prisma client and exposes it to
-   resolvers through the GraphQL context; the upload endpoint uses Tigris.
+   `dist/src/server/graphql/schema.graphql`.
+2. Set `DATABASE_URL`, the `S3_*` variables, and (optionally)
+   `APPLICATIONINSIGHTS_CONNECTION_STRING` in the Function App configuration.
+   The handler creates the Prisma client and exposes it to resolvers through
+   the GraphQL context; the upload endpoint uses Tigris.
 3. `host.json` uses version 2.0; the Node runtime is set with
    `FUNCTIONS_WORKER_RUNTIME: "node"` in `local.settings.json` (local) or in
    the application settings (Azure).
-4. The function entrypoint is `dist/src/functions/index.js`
+4. The function entrypoint is `dist/src/server/functions/index.js`
    (`main` field in `package.json`). It imports and registers both the
    `graphql` and `upload` functions.
 5. Make sure the deployment package includes the `dist/` output from the build
@@ -363,7 +432,7 @@ handler.
   `allowImportingTsExtensions` and `rewriteRelativeImportExtensions`).
 - `src/generated/prisma/` is ignored by ESLint and git: do not edit it.
 - `src/generated/graphql.ts` is generated by `pnpm generate`: do not edit it.
-- `src/graphql/schema.ts` is a commented-out legacy `typeDefs` module; the SDL
+- `src/server/graphql/schema.ts` is a commented-out legacy `typeDefs` module; the SDL
   in `schema.graphql` is the source of truth.
 - Data access goes through the GraphQL context (`context.db`), not through a
   direct `prisma` import inside resolvers.
@@ -379,8 +448,8 @@ handler.
 - Uploads require network access to Tigris and valid `S3_*` credentials; a
   missing variable or storage error makes `POST /api/upload` return `500`.
 - Objects are uploaded as public by default. If the bucket policy forbids
-  public access, adjust `lib/tigris.ts` and serve private objects with signed
-  URLs instead.
+  public access, adjust `src/server/infrastructure/tigris.ts` and serve private
+  objects with signed URLs instead.
 - Uploads are not persisted in PostgreSQL: the database stores no image key or
   URL yet.
 - `azure-functions-core-tools` downloads the Core Tools binary on its first

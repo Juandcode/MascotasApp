@@ -1,6 +1,6 @@
 import { GraphQLResolveInfo, GraphQLScalarType, GraphQLScalarTypeConfig } from 'graphql';
-import { Pet as PetModel } from './prisma/client.ts';
-import { MyContext } from '../../main.ts';
+import { Pet as PetModel, User as UserModel } from './prisma/client.ts';
+import { MyContext } from '../server/context.ts';
 export type Maybe<T> = T | null;
 export type InputMaybe<T> = Maybe<T>;
 export type RequireFields<T, K extends keyof T> = Omit<T, K> & { [P in K]-?: NonNullable<T[P]> };
@@ -18,16 +18,27 @@ export type CreatePetInput = {
   age?: InputMaybe<Scalars['Int']['input']>;
   name: Scalars['String']['input'];
   species: Scalars['String']['input'];
+  userId: Scalars['ID']['input'];
+};
+
+export type CreateUserInput = {
+  name: Scalars['String']['input'];
 };
 
 export type Mutation = {
   __typename?: 'Mutation';
   createPet: Pet;
+  createUser: User;
 };
 
 
 export type MutationCreatePetArgs = {
   input: CreatePetInput;
+};
+
+
+export type MutationCreateUserArgs = {
+  input: CreateUserInput;
 };
 
 export type Pet = {
@@ -37,17 +48,32 @@ export type Pet = {
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
   species: Scalars['String']['output'];
+  user?: Maybe<User>;
 };
 
 export type Query = {
   __typename?: 'Query';
   pet?: Maybe<Pet>;
   pets: Array<Pet>;
+  user?: Maybe<User>;
+  users: Array<User>;
 };
 
 
 export type QueryPetArgs = {
   id: Scalars['ID']['input'];
+};
+
+
+export type QueryUserArgs = {
+  id: Scalars['ID']['input'];
+};
+
+export type User = {
+  __typename?: 'User';
+  id: Scalars['ID']['output'];
+  name: Scalars['String']['output'];
+  pets: Array<Pet>;
 };
 
 export type WithIndex<TObject> = TObject & Record<string, any>;
@@ -126,6 +152,7 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 export type ResolversTypes = ResolversObject<{
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   CreatePetInput: CreatePetInput;
+  CreateUserInput: CreateUserInput;
   DateTime: ResolverTypeWrapper<Scalars['DateTime']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Int: ResolverTypeWrapper<Scalars['Int']['output']>;
@@ -133,12 +160,14 @@ export type ResolversTypes = ResolversObject<{
   Pet: ResolverTypeWrapper<PetModel>;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
+  User: ResolverTypeWrapper<UserModel>;
 }>;
 
 /** Mapping between all available schema types and the resolvers parents */
 export type ResolversParentTypes = ResolversObject<{
   Boolean: Scalars['Boolean']['output'];
   CreatePetInput: CreatePetInput;
+  CreateUserInput: CreateUserInput;
   DateTime: Scalars['DateTime']['output'];
   ID: Scalars['ID']['output'];
   Int: Scalars['Int']['output'];
@@ -146,6 +175,7 @@ export type ResolversParentTypes = ResolversObject<{
   Pet: PetModel;
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
+  User: UserModel;
 }>;
 
 export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<ResolversTypes['DateTime'], any> {
@@ -154,6 +184,7 @@ export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<ResolversT
 
 export type MutationResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
   createPet?: Resolver<ResolversTypes['Pet'], ParentType, ContextType, RequireFields<MutationCreatePetArgs, 'input'>>;
+  createUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationCreateUserArgs, 'input'>>;
 }>;
 
 export type PetResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['Pet'] = ResolversParentTypes['Pet']> = ResolversObject<{
@@ -162,10 +193,19 @@ export type PetResolvers<ContextType = MyContext, ParentType extends ResolversPa
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   species?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  user?: Resolver<Maybe<ResolversTypes['User']>, ParentType, ContextType>;
 }>;
 
 export type QueryResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['Query'] = ResolversParentTypes['Query']> = ResolversObject<{
   pet?: Resolver<Maybe<ResolversTypes['Pet']>, ParentType, ContextType, RequireFields<QueryPetArgs, 'id'>>;
+  pets?: Resolver<Array<ResolversTypes['Pet']>, ParentType, ContextType>;
+  user?: Resolver<Maybe<ResolversTypes['User']>, ParentType, ContextType, RequireFields<QueryUserArgs, 'id'>>;
+  users?: Resolver<Array<ResolversTypes['User']>, ParentType, ContextType>;
+}>;
+
+export type UserResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['User'] = ResolversParentTypes['User']> = ResolversObject<{
+  id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
+  name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   pets?: Resolver<Array<ResolversTypes['Pet']>, ParentType, ContextType>;
 }>;
 
@@ -174,5 +214,6 @@ export type Resolvers<ContextType = MyContext> = ResolversObject<{
   Mutation?: MutationResolvers<ContextType>;
   Pet?: PetResolvers<ContextType>;
   Query?: QueryResolvers<ContextType>;
+  User?: UserResolvers<ContextType>;
 }>;
 

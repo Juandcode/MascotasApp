@@ -7,3 +7,5 @@ app.http("upload", {
   route: "upload",
   handler: uploadHandler,
 });
+
+console.log("[functions] upload function registered");

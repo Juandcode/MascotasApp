@@ -1,6 +1,6 @@
 //import type {PrismaClient} from "../../generated/prisma/client.ts";
-import type {QueryResolvers} from "../../generated/graphql.js";
-import { GraphQLError } from "graphql";
+import type {QueryResolvers} from "../../../generated/graphql.js";
+import {GraphQLError} from "graphql";
 
 //type PetDelegate = PrismaClient["pet"];
 
@@ -11,15 +11,18 @@ import { GraphQLError } from "graphql";
 //     (_, __, contextValue: MyContext) => (_parent: unknown, args: { id: string }) =>
 //         contextValue.db.findUnique({where: {id: Number(args.id)}});
 export const getPets: QueryResolvers["pets"] = (_, __, contextValue) =>
-    contextValue.db.pet.findMany({orderBy: {createdAt: "desc"}});
+    contextValue.db.pet.findMany({orderBy: {createdAt: "desc"}, include: {user: true}});
 
-export const getPet: QueryResolvers["pet"] = (_parent, args, contextValue) => {
+export const getPet: QueryResolvers["pet"] = (_, args, contextValue) => {
     const id = Number(args.id);
     if (!Number.isInteger(id)) {
         throw new GraphQLError("ID inválido", {
-            extensions: { code: "BAD_USER_INPUT" },
+            extensions: {code: "BAD_USER_INPUT"},
         });
     }
-    return contextValue.db.pet.findUnique({ where: { id } });
+    return contextValue.db.pet.findUnique({
+        where: {id},
+        include: {user: true},
+    });
 };
 

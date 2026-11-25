@@ -18,6 +18,6 @@
     "rewriteRelativeImportExtensions": true,
     "types": ["node"]
   },
-  "include": ["main.ts", "lib/**/*.ts", "src/**/*.ts"],
+  "include": ["main.ts", "src/**/*.ts"],
   "exclude": ["node_modules", "dist"]
 }

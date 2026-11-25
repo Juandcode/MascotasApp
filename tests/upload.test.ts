@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { HttpResponseInit } from "@azure/functions";
+import express from "express";
+import { createServer } from "node:http";
 
 const { put } = vi.hoisted(() => {
   process.env.S3_BUCKET = "test-bucket";
@@ -12,7 +14,9 @@ const { put } = vi.hoisted(() => {
 
 vi.mock("@tigrisdata/storage", () => ({ put }));
 
-import { MAX_FILE_SIZE_BYTES, uploadHandler } from "../src/functions/uploadHandler.ts";
+import { MAX_FILE_SIZE_BYTES } from "../src/server/uploads/imageUpload.ts";
+import { uploadHandler } from "../src/server/functions/uploadHandler.ts";
+import { uploadRouter } from "../src/server/uploads/uploadRouter.ts";
 
 type UploadResponse = {
   filename: string;
@@ -39,6 +43,40 @@ function uploadRequest(file?: File): Request {
     method: "POST",
     body: form,
   });
+}
+
+async function startStandaloneUploadServer(): Promise<{
+  url: string;
+  close: () => Promise<void>;
+}> {
+  const app = express();
+  app.use("/api/upload", uploadRouter);
+  const server = createServer(app);
+
+  await new Promise<void>((resolve) => {
+    server.listen(0, "127.0.0.1", resolve);
+  });
+
+  const address = server.address();
+  if (!address || typeof address === "string") {
+    server.close();
+    throw new Error("No se pudo obtener el puerto del servidor de prueba");
+  }
+
+  return {
+    url: `http://127.0.0.1:${address.port}/api/upload`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.closeAllConnections();
+        server.close((error) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve();
+          }
+        });
+      }),
+  };
 }
 
 beforeEach(() => {
@@ -86,6 +124,29 @@ describe("upload handler", () => {
         endpoint: "https://t3.storage.dev",
       },
     });
+  });
+
+  it("sube una imagen válida por el servidor standalone", async () => {
+    const standalone = await startStandaloneUploadServer();
+
+    try {
+      const form = new FormData();
+      form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
+
+      const response = await fetch(standalone.url, {
+        method: "POST",
+        body: form,
+      });
+      const body = (await response.json()) as UploadResponse;
+
+      expect(response.status).toBe(201);
+      expect(body.filename).toMatch(/^[0-9a-f-]{36}\.png$/);
+      expect(body.key).toBe(`uploads/${body.filename}`);
+      expect(body.url).toBe(`https://test-bucket.t3.storage.dev/uploads/${body.filename}`);
+      expect(put).toHaveBeenCalledTimes(1);
+    } finally {
+      await standalone.close();
+    }
   });
 
   it("rechaza archivos que no son imágenes sin subirlos", async () => {

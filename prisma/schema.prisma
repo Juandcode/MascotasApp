@@ -9,10 +9,18 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id   String @id @default(uuid())
+  name String
+  pets Pet[]
+}
+
 model Pet {
-  id        Int      @id @default(autoincrement())
+  id        String   @id @default(uuid())
   name      String
   species   String
   age       Int?
   createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
 }

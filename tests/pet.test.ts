@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../src/generated/prisma/client.ts";
-import type { MyContext } from "../main.ts";
-import { createPet } from "../src/graphql/mutations/PetMutation.ts";
-import { getPet, getPets } from "../src/graphql/queries/PetQuery.ts";
+import type { MyContext } from "../src/server/context.ts";
+import { createPet } from "../src/server/graphql/mutations/PetMutation.ts";
+import { getPet, getPets } from "../src/server/graphql/queries/PetQuery.ts";
 
 type PetDelegate = PrismaClient["pet"];
 
@@ -36,6 +36,7 @@ describe("Pet queries", () => {
     expect(pets).toEqual([pet]);
     expect(delegate.findMany).toHaveBeenCalledWith({
       orderBy: { createdAt: "desc" },
+      include: { user: true },
     });
   });
 
@@ -44,7 +45,10 @@ describe("Pet queries", () => {
     const petById = await getPet({}, { id: "1" }, context, {} as never);
 
     expect(petById).toEqual(pet);
-    expect(delegate.findUnique).toHaveBeenCalledWith({ where: { id: 1 } });
+    expect(delegate.findUnique).toHaveBeenCalledWith({
+      where: { id: 1 },
+      include: { user: true },
+    });
   });
 
   it("rejects an id that is not an integer", async () => {
