@@ -9,9 +9,7 @@ await new Promise<void>((resolve) => {
   httpServer.listen({ port: config.port }, resolve);
 });
 
-console.log(
-  `[startup] GraphQL server ready at http://localhost:${config.port}/graphql`,
-);
+console.log(`[startup] GraphQL server ready at http://localhost:${config.port}/graphql`);
 console.log(
   `[startup] Upload endpoint ready at http://localhost:${config.port}/api/upload uploadsConfigured=${config.uploadsConfigured}`,
 );

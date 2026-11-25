@@ -1,40 +1,39 @@
 scalar DateTime
 
 type User {
-    id: ID!
-    name: String!
-    pets: [Pet!]!
+  id: ID!
+  name: String!
+  pets: [Pet!]!
 }
 
 type Pet {
-    id: ID!
-    name: String!
-    species: String!
-    age: Int
-    createdAt: DateTime!
-    user: User
+  id: ID!
+  name: String!
+  species: String!
+  age: Int
+  createdAt: DateTime!
+  user: User
 }
 
-
 input CreatePetInput {
-    name: String!
-    species: String!
-    age: Int,
-    userId: ID!
+  name: String!
+  species: String!
+  age: Int
+  userId: ID!
 }
 
 input CreateUserInput {
-    name: String!
+  name: String!
 }
 
 type Query {
-    pets: [Pet!]!
-    pet(id: ID!): Pet
-    users: [User!]!
-    user(id: ID!): User
+  pets: [Pet!]!
+  pet(id: ID!): Pet
+  users: [User!]!
+  user(id: ID!): User
 }
 
 type Mutation {
-    createPet(input: CreatePetInput!): Pet!
-    createUser(input: CreateUserInput!): User!
+  createPet(input: CreatePetInput!): Pet!
+  createUser(input: CreateUserInput!): User!
 }

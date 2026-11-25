@@ -1,26 +1,27 @@
 import "dotenv/config";
-import {PrismaPg} from "@prisma/adapter-pg";
-import {PrismaClient} from "../../generated/prisma/client.ts";
+import { PrismaPg } from "@prisma/adapter-pg";
+import { PrismaClient } from "../../generated/prisma/client.ts";
 
 const connectionString = process.env.DATABASE_URL;
 
 if (!connectionString) {
-    throw new Error("DATABASE_URL is not defined");
+  throw new Error("DATABASE_URL is not defined");
 }
 
-const adapter = new PrismaPg({connectionString});
+const adapter = new PrismaPg({ connectionString });
 
 export const prisma = new PrismaClient({
-    adapter, log: [
-        {
-            emit: 'event',
-            level: 'query',
-        },
-        'error',
-    ],
+  adapter,
+  log: [
+    {
+      emit: "event",
+      level: "query",
+    },
+    "error",
+  ],
 });
 
-prisma.$on('query', (e) => {
-    console.log('SQL:', e.query);
-    console.log('Parámetros:', e.params);
+prisma.$on("query", (e) => {
+  console.log("SQL:", e.query);
+  console.log("Parámetros:", e.params);
 });

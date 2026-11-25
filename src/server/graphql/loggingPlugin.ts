@@ -10,9 +10,7 @@ export const graphqlLoggingPlugin: ApolloServerPlugin<MyContext> = {
 
     return {
       async didEncounterErrors(errorContext) {
-        const codes = errorContext.errors.map(
-          (error) => error.extensions?.code ?? "UNKNOWN",
-        );
+        const codes = errorContext.errors.map((error) => error.extensions?.code ?? "UNKNOWN");
         console.error(
           `[graphql] errors operation=${operationName} count=${codes.length} codes=${codes.join(",")}`,
         );

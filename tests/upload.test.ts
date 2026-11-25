@@ -27,9 +27,7 @@ type UploadResponse = {
   error?: string;
 };
 
-const PNG_BYTES = new Uint8Array([
-  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a,
-]);
+const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
 const context = { error: vi.fn() } as never;
 
@@ -81,16 +79,14 @@ async function startStandaloneUploadServer(): Promise<{
 
 beforeEach(() => {
   put.mockReset();
-  put.mockImplementation(
-    async (key: string, body: Buffer, options?: { contentType?: string }) => ({
-      data: {
-        path: key,
-        url: `https://test-bucket.t3.storage.dev/${key}`,
-        size: body.length,
-        contentType: options?.contentType,
-      },
-    }),
-  );
+  put.mockImplementation(async (key: string, body: Buffer, options?: { contentType?: string }) => ({
+    data: {
+      path: key,
+      url: `https://test-bucket.t3.storage.dev/${key}`,
+      size: body.length,
+      contentType: options?.contentType,
+    },
+  }));
 });
 
 describe("upload handler", () => {
@@ -180,11 +176,9 @@ describe("upload handler", () => {
   });
 
   it("rechaza archivos mayores a 15 MB sin subirlos", async () => {
-    const file = new File(
-      [new Uint8Array(MAX_FILE_SIZE_BYTES + 1)],
-      "grande.png",
-      { type: "image/png" },
-    );
+    const file = new File([new Uint8Array(MAX_FILE_SIZE_BYTES + 1)], "grande.png", {
+      type: "image/png",
+    });
 
     const response = (await uploadHandler(
       uploadRequest(file) as never,
@@ -197,10 +191,7 @@ describe("upload handler", () => {
   });
 
   it("rechaza solicitudes sin archivo", async () => {
-    const response = (await uploadHandler(
-      uploadRequest() as never,
-      context,
-    )) as HttpResponseInit;
+    const response = (await uploadHandler(uploadRequest() as never, context)) as HttpResponseInit;
 
     expect(response.status).toBe(400);
     expect((response.jsonBody as UploadResponse).error).toMatch(/campo "file"/);

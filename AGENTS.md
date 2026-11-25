@@ -39,6 +39,7 @@ pnpm dev              # standalone Express + Apollo server (GraphQL and uploads)
 pnpm start            # node dist/main.js
 pnpm lint             # eslint .
 pnpm typecheck        # tsc --noEmit
+pnpm format           # prettier --write .
 pnpm test             # vitest run
 pnpm test:watch       # vitest
 pnpm generate         # GraphQL Code Generator (src/generated/graphql.ts)
@@ -64,7 +65,7 @@ pnpm azure:dev        # build + func start
 - `src/server/functions/handler.ts`: shared Apollo Server with the Azure
   Functions integration (`startServerAndCreateHandler`). It resolves the SDL
   relative to its own module (`new URL("../graphql/schema.graphql",
-  import.meta.url)`) and supplies the context factory `{ db: prisma }`, matching
+import.meta.url)`) and supplies the context factory `{ db: prisma }`, matching
   `src/server/app.ts`.
 - `src/server/functions/index.ts`: Azure Functions entrypoint (`main` in
   `package.json`); it imports `graphql.ts` and `upload.ts` so both functions

@@ -1,9 +1,4 @@
-import express, {
-  type NextFunction,
-  type Request,
-  type Response,
-  type Router,
-} from "express";
+import express, { type NextFunction, type Request, type Response, type Router } from "express";
 import multer from "multer";
 import {
   MAX_FILE_SIZE_BYTES,
@@ -47,9 +42,7 @@ uploadRouter.post(
 
     const result = await processImageUpload({ buffer: file.buffer, mimetype: file.mimetype });
 
-    console.log(
-      `[upload] response status=${result.status} durationMs=${Date.now() - startedAt}`,
-    );
+    console.log(`[upload] response status=${result.status} durationMs=${Date.now() - startedAt}`);
 
     if (!result.ok) {
       response.status(result.status).json({ error: result.error });
@@ -60,19 +53,17 @@ uploadRouter.post(
   },
 );
 
-uploadRouter.use(
-  (error: unknown, _request: Request, response: Response, _next: NextFunction) => {
-    if (error instanceof multer.MulterError) {
-      const message =
-        error.code === "LIMIT_FILE_SIZE"
-          ? "El archivo supera el máximo de 15 MB"
-          : "Formulario multipart inválido";
-      console.log(`[upload] rejected status=400 reason=${error.code}`);
-      response.status(400).json({ error: message });
-      return;
-    }
+uploadRouter.use((error: unknown, _request: Request, response: Response, _next: NextFunction) => {
+  if (error instanceof multer.MulterError) {
+    const message =
+      error.code === "LIMIT_FILE_SIZE"
+        ? "El archivo supera el máximo de 15 MB"
+        : "Formulario multipart inválido";
+    console.log(`[upload] rejected status=400 reason=${error.code}`);
+    response.status(400).json({ error: message });
+    return;
+  }
 
-    console.error("[upload] parser failure", error);
-    response.status(400).json({ error: "Formulario multipart inválido" });
-  },
-);
+  console.error("[upload] parser failure", error);
+  response.status(400).json({ error: "Formulario multipart inválido" });
+});

@@ -8,22 +8,22 @@ generated with GraphQL Code Generator.
 
 ## Stack
 
-| Area             | Technology                                                    |
-| ---------------- | ------------------------------------------------------------- |
-| Language         | TypeScript (ESM, `NodeNext`, `strict`)                        |
-| Runtime          | Node.js                                                       |
-| API              | Apollo Server 5 + GraphQL 16                                  |
-| HTTP server      | Express 5 + `@as-integrations/express5`                       |
-| Upload parsing   | `multer` (memory storage)                                     |
-| Schema / types   | GraphQL Code Generator (`typescript`, `typescript-resolvers`) |
-| Scalars          | `graphql-scalars` (`DateTime`)                                |
-| ORM / database   | Prisma 7 (`prisma-client`, ESM) + `@prisma/adapter-pg`        |
-| Database         | PostgreSQL                                                    |
-| Object storage   | Tigris (`@tigrisdata/storage`, S3-compatible)                 |
-| Serverless       | Azure Functions 4 (`@azure/functions`)                        |
-| Tests            | Vitest                                                        |
-| Linter           | ESLint + typescript-eslint                                    |
-| Package manager  | pnpm 12.21.0                                                  |
+| Area            | Technology                                                    |
+| --------------- | ------------------------------------------------------------- |
+| Language        | TypeScript (ESM, `NodeNext`, `strict`)                        |
+| Runtime         | Node.js                                                       |
+| API             | Apollo Server 5 + GraphQL 16                                  |
+| HTTP server     | Express 5 + `@as-integrations/express5`                       |
+| Upload parsing  | `multer` (memory storage)                                     |
+| Schema / types  | GraphQL Code Generator (`typescript`, `typescript-resolvers`) |
+| Scalars         | `graphql-scalars` (`DateTime`)                                |
+| ORM / database  | Prisma 7 (`prisma-client`, ESM) + `@prisma/adapter-pg`        |
+| Database        | PostgreSQL                                                    |
+| Object storage  | Tigris (`@tigrisdata/storage`, S3-compatible)                 |
+| Serverless      | Azure Functions 4 (`@azure/functions`)                        |
+| Tests           | Vitest                                                        |
+| Linter          | ESLint + typescript-eslint                                    |
+| Package manager | pnpm 12.21.0                                                  |
 
 ## Project structure
 
@@ -109,10 +109,10 @@ pnpm generate
 
 There are two independent generation steps:
 
-| Source                     | Command               | Output                            |
-| -------------------------- | --------------------- | --------------------------------- |
-| `prisma/schema.prisma`     | `pnpm prisma:generate`| `src/generated/prisma/`           |
-| `src/server/graphql/schema.graphql` | `pnpm generate`     | `src/generated/graphql.ts`        |
+| Source                              | Command                | Output                     |
+| ----------------------------------- | ---------------------- | -------------------------- |
+| `prisma/schema.prisma`              | `pnpm prisma:generate` | `src/generated/prisma/`    |
+| `src/server/graphql/schema.graphql` | `pnpm generate`        | `src/generated/graphql.ts` |
 
 `codegen.yml` configures GraphQL Code Generator to:
 
@@ -154,22 +154,22 @@ S3_SECRET_ACCESS_KEY=tu-secret-key
 
 ## Scripts
 
-| Script                  | Description                                              |
-| ----------------------- | -------------------------------------------------------- |
-| `pnpm build`            | Compiles TypeScript to `dist/` and copies the SDL        |
-| `pnpm dev`              | Standalone server with reload (`tsx watch main.ts`)      |
-| `pnpm start`            | Runs the compiled build (`node dist/main.js`)            |
-| `pnpm start:ts`         | Standalone server directly with `tsx`                    |
-| `pnpm typecheck`        | `tsc --noEmit`                                           |
-| `pnpm lint`             | `eslint .`                                               |
-| `pnpm test`             | Vitest, single run                                       |
-| `pnpm test:watch`       | Vitest in watch mode                                     |
-| `pnpm prisma:generate`  | Generates the Prisma client                              |
-| `pnpm prisma:migrate`   | Creates and applies migrations in development            |
-| `pnpm prisma:studio`    | Opens Prisma Studio                                      |
-| `pnpm generate`         | Runs GraphQL Code Generator (`gql-gen --config codegen.yml`) |
-| `pnpm azure:start`      | Starts Azure Functions Core Tools (`func start`)         |
-| `pnpm azure:dev`        | Builds and starts Azure Functions                        |
+| Script                 | Description                                                  |
+| ---------------------- | ------------------------------------------------------------ |
+| `pnpm build`           | Compiles TypeScript to `dist/` and copies the SDL            |
+| `pnpm dev`             | Standalone server with reload (`tsx watch main.ts`)          |
+| `pnpm start`           | Runs the compiled build (`node dist/main.js`)                |
+| `pnpm start:ts`        | Standalone server directly with `tsx`                        |
+| `pnpm typecheck`       | `tsc --noEmit`                                               |
+| `pnpm lint`            | `eslint .`                                                   |
+| `pnpm test`            | Vitest, single run                                           |
+| `pnpm test:watch`      | Vitest in watch mode                                         |
+| `pnpm prisma:generate` | Generates the Prisma client                                  |
+| `pnpm prisma:migrate`  | Creates and applies migrations in development                |
+| `pnpm prisma:studio`   | Opens Prisma Studio                                          |
+| `pnpm generate`        | Runs GraphQL Code Generator (`gql-gen --config codegen.yml`) |
+| `pnpm azure:start`     | Starts Azure Functions Core Tools (`func start`)             |
+| `pnpm azure:dev`       | Builds and starts Azure Functions                            |
 
 ## Database
 

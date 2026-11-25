@@ -6,10 +6,7 @@ import { resolvers } from "../graphql/index.ts";
 import { prisma } from "../infrastructure/prisma.ts";
 import type { MyContext } from "../context.ts";
 
-const typeDefs = readFileSync(
-  new URL("../graphql/schema.graphql", import.meta.url),
-  "utf-8",
-);
+const typeDefs = readFileSync(new URL("../graphql/schema.graphql", import.meta.url), "utf-8");
 const server = new ApolloServer<MyContext>({
   typeDefs,
   resolvers,

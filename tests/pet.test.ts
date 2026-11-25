@@ -54,11 +54,11 @@ describe("Pet queries", () => {
   it("rejects an id that is not an integer", async () => {
     const { delegate, context } = createContext();
 
-    await expect(
-      async () => getPet({}, { id: "abc" }, context, {} as never),
-    ).rejects.toMatchObject({
-      extensions: { code: "BAD_USER_INPUT" },
-    });
+    await expect(async () => getPet({}, { id: "abc" }, context, {} as never)).rejects.toMatchObject(
+      {
+        extensions: { code: "BAD_USER_INPUT" },
+      },
+    );
     expect(delegate.findUnique).not.toHaveBeenCalled();
   });
 });

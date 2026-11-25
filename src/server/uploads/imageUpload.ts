@@ -32,12 +32,7 @@ export type ImageUploadResult =
   | { ok: false; status: 400 | 500; error: string };
 
 function sniffImageMimeType(buffer: Buffer): string | undefined {
-  if (
-    buffer.length >= 3 &&
-    buffer[0] === 0xff &&
-    buffer[1] === 0xd8 &&
-    buffer[2] === 0xff
-  ) {
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
     return "image/jpeg";
   }
 
@@ -63,9 +58,7 @@ function sniffImageMimeType(buffer: Buffer): string | undefined {
 
 function validateImageInput(
   input: ImageUploadInput,
-):
-  | { ok: true; mimetype: string; extension: string }
-  | { ok: false; error: string } {
+): { ok: true; mimetype: string; extension: string } | { ok: false; error: string } {
   if (input.buffer.length === 0) {
     return { ok: false, error: "El archivo está vacío" };
   }
