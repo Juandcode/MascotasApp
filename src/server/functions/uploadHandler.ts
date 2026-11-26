@@ -4,7 +4,7 @@ import {
   MAX_REQUEST_SIZE_BYTES,
   UPLOAD_FIELD,
   processImageUpload,
-} from "../uploads/imageUpload.ts";
+} from "../express/uploads/imageUpload.ts";
 
 function badRequest(error: string): HttpResponseInit {
   return { status: 400, jsonBody: { error } };

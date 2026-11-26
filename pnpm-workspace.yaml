@@ -4,3 +4,5 @@ allowBuilds:
   "@apollo/protobufjs": true
   "@prisma/engines": true
   prisma: true
+  onnxruntime-node: set this to true or false
+  protobufjs: set this to true or false

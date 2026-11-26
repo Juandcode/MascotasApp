@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import cors from "cors";
-import { uploadRouter } from "../uploads/uploadRouter.js";
+import { uploadRouter } from "./uploads/uploadRouter.js";
 import express, { Express, NextFunction, Request, Response } from "express";
 import { expressMiddleware } from "@as-integrations/express5";
 import { prisma } from "../infrastructure/prisma.js";

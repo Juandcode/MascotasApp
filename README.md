@@ -318,7 +318,7 @@ on both the standalone Express server and the Azure Functions host.
 - Credentials come from `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
   `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` (see
   [Environment variables](#environment-variables)).
-- Validation lives in `src/server/uploads/imageUpload.ts` and is shared by the
+- Validation lives in `src/server/express/uploads` and is shared by the
   standalone Express route and the Azure Functions adapter.
 
 Standalone server:

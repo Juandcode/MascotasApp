@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { uploadImage } from "../infrastructure/tigris.ts";
+import { uploadImage } from "../../infrastructure/tigris.ts";
 
 export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 export const MAX_REQUEST_SIZE_BYTES = MAX_FILE_SIZE_BYTES + 1024 * 1024;

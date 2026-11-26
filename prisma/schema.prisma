@@ -12,15 +12,30 @@ datasource db {
 model User {
   id   String @id @default(uuid())
   name String
-  pets Pet[]
+  pets PetLost[]
+  @@map("user")
 }
 
-model Pet {
+model PetLost {
   id        String   @id @default(uuid())
-  name      String
-  species   String
-  age       Int?
-  createdAt DateTime @default(now())
+  name   String
+  contact String?
+  color    String?
+  race     String?
+  state   String        @default("perdido")
+  createdAt DateTime      @default(now()) @map("created_at")
+  photos    PhotoPetLost[]
   userId    String
   user      User     @relation(fields: [userId], references: [id])
+  @@map("pet_lost")
+}
+
+model PhotoPetLost {
+  id        String                      @id @default(uuid())
+  petId     String                      @map("pet_id")
+  pet       PetLost                     @relation(fields: [petId], references: [id], onDelete: Cascade)
+  url       String
+  embedding Unsupported("vector(768)")?
+
+  @@map("photopet_lost")
 }

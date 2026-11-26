@@ -12,5 +12,5 @@ generates:
       scalars:
         DateTime: Date
       mappers:
-        Pet: "./prisma/client.ts#Pet as PetModel"
+        PetLost: "./prisma/client.ts#PetLost as PetLostModel"
         User: "./prisma/client.ts#User as UserModel"

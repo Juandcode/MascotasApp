@@ -78,11 +78,11 @@ import.meta.url)`) and supplies the context factory `{ db: prisma }`, matching
   `/api/upload`.
 - `src/server/functions/uploadHandler.ts`: Azure Functions adapter that validates
   `multipart/form-data` with a `file` field and delegates to
-  `src/server/uploads/imageUpload.ts`.
-- `src/server/uploads/imageUpload.ts`: shared upload validation (JPEG/PNG/GIF/WebP
+  `src/server/express/uploads`.
+- `src/server/express/uploads`: shared upload validation (JPEG/PNG/GIF/WebP
   up to 15 MB, magic bytes) and Tigris upload. Used by both the standalone route
   and the Azure Functions adapter.
-- `src/server/uploads/uploadRouter.ts`: Express router for `POST /api/upload`,
+- `src/server/express/uploads`: Express router for `POST /api/upload`,
   using `multer` memory storage and the shared upload processor.
 - `src/server/graphql/loggingPlugin.ts`: Apollo plugin that logs operation start,
   duration, and error codes with `console.log`/`console.error`.
@@ -122,7 +122,7 @@ Azure request flow: HTTP `/api/graphql` -> `graphqlHandler` -> Apollo Server
 -> resolvers (GraphQL context `{ db }`) -> `context.db.pet` -> PostgreSQL.
 
 Upload flow: HTTP `/api/upload` (standalone Express or Azure Functions)
--> multipart validation -> `src/server/uploads/imageUpload.ts` ->
+-> multipart validation -> `src/server/express/uploads` ->
 `src/server/infrastructure/tigris.ts` -> `@tigrisdata/storage` `put()` ->
 `uploads/<uuid>.<ext>` in the Tigris bucket. Both transports share the same
 validation and upload code.
@@ -145,7 +145,7 @@ validation and upload code.
   generate UUID filenames, and never trust client filenames.
 - Uploads go through `src/server/infrastructure/tigris.ts`; do not import `@tigrisdata/storage`
   directly from handlers or resolvers. Never hardcode bucket credentials.
-- Keep upload validation in `src/server/uploads/imageUpload.ts`; both the Express
+- Keep upload validation in `src/server/express/uploads`; both the Express
   router and the Azure Functions adapter must use it instead of duplicating
   rules.
 - Logs use `console.log`/`console.error` with prefixes (`[http]`,
@@ -177,7 +177,7 @@ validation and upload code.
 - For uploads, build a `FormData` request, set dummy `S3_*` env vars before
   importing the handler, and mock `@tigrisdata/storage` `put()` (see
   `tests/upload.test.ts`). Do not require real credentials in tests.
-- Test the standalone upload route by mounting `src/server/uploads/uploadRouter.ts` on
+- Test the standalone upload route by mounting `src/server/express/uploads` on
   a real Express app and listening on an ephemeral port; close all connections
   after the test.
 - Run `pnpm test` before considering a change done.

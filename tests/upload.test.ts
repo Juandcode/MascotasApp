@@ -14,9 +14,9 @@ const { put } = vi.hoisted(() => {
 
 vi.mock("@tigrisdata/storage", () => ({ put }));
 
-import { MAX_FILE_SIZE_BYTES } from "../src/server/uploads/imageUpload.ts";
+import { MAX_FILE_SIZE_BYTES } from "../src/server/express/uploads/imageUpload.ts";
 import { uploadHandler } from "../src/server/functions/uploadHandler.ts";
-import { uploadRouter } from "../src/server/uploads/uploadRouter.ts";
+import { uploadRouter } from "../src/server/express/uploads/uploadRouter.ts";
 
 type UploadResponse = {
   filename: string;
