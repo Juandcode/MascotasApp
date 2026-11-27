@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../src/generated/prisma/client.ts";
 import type { MyContext } from "../src/server/context.ts";
-import { createLostPet } from "../src/server/graphql/mutations/PetMutation.ts";
+import { createLostPet, createPhotoLostPet } from "../src/server/graphql/mutations/PetMutation.ts";
 import { getPet, getPets } from "../src/server/graphql/queries/PetQuery.ts";
 
 type PetLostDelegate = PrismaClient["petLost"];
@@ -78,5 +78,37 @@ describe("PetLost mutations", () => {
 
     expect(created).toEqual(pet);
     expect(delegate.create).toHaveBeenCalledWith({ data: input, include: { user: true } });
+  });
+
+  it("creates a photo for an existing pet", async () => {
+    const photo = {
+      id: "3d9e4f56-7081-4c0b-9e2f-3a4b5c6d7e8f",
+      petId: pet.id,
+      key: "uploads/key.png",
+      url: "https://bucket/uploads/key.png",
+    };
+    const create = vi.fn().mockResolvedValue(photo);
+    const context = { db: { photoPetLost: { create } } } as unknown as MyContext;
+    const input = { key: photo.key, url: photo.url, petId: pet.id };
+
+    const created = await createPhotoLostPet({}, { input }, context, {} as never);
+
+    expect(created).toEqual(photo);
+    expect(create).toHaveBeenCalledWith({ data: input, include: { petLost: true } });
+  });
+
+  it("rejects a photo with an invalid pet id", async () => {
+    const create = vi.fn();
+    const context = { db: { photoPetLost: { create } } } as unknown as MyContext;
+
+    await expect(
+      createPhotoLostPet(
+        {},
+        { input: { key: "uploads/key.png", url: "https://bucket/key.png", petId: "1" } },
+        context,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ extensions: { code: "BAD_USER_INPUT" } });
+    expect(create).not.toHaveBeenCalled();
   });
 });

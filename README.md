@@ -43,15 +43,17 @@ backendmascotas/
 │   │   │   ├── loggingPlugin.ts # Apollo plugin for console/App Insights logs
 │   │   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.petLost)
 │   │   │   ├── queries/UserQuery.ts # getUsers / getUser (context.db.user)
-│   │   │   ├── mutations/PetMutation.ts  # createLostPet (context.db.petLost)
+│   │   │   ├── mutations/PetMutation.ts  # createLostPet / createPhotoLostPet
 │   │   │   └── mutations/UserMutation.ts # createUser (context.db.user)
+│   │   ├── services/
+│   │   │   └── photoPetLost.ts  # Shared photo persistence + ownership check
 │   │   ├── infrastructure/
 │   │   │   ├── prisma.ts        # PrismaClient + pg adapter and .env loading
-│   │   │   └── tigris.ts        # Tigris upload helper (S3-compatible bucket)
+│   │   │   └── tigris.ts        # Tigris upload/delete helpers (S3-compatible bucket)
 │   │   ├── express/
 │   │   │   ├── indexs.ts        # createHttpServer: middleware, health, routes
 │   │   │   └── uploads/
-│   │   │       ├── imageUpload.ts   # Shared validation + Tigris upload logic
+│   │   │       ├── imageUpload.ts   # Validation, Tigris upload, PhotoPetLost insert
 │   │   │       └── uploadRouter.ts  # Standalone POST /api/upload/:idUser/:idPet route
 │   │   └── functions/
 │   │       ├── index.ts         # Azure Functions entrypoint (registers both functions)
@@ -69,6 +71,7 @@ backendmascotas/
 │   └── copy-sdl.mjs             # Copies schema.graphql into dist/ during build
 ├── tests/
 │   ├── pet.test.ts              # Unit tests for PetLost queries/mutations
+│   ├── photoPetLost.test.ts     # Unit tests for photo persistence/ownership
 │   ├── user.test.ts             # Unit tests for user queries/mutations
 │   ├── upload.test.ts           # Unit tests for the upload endpoint
 │   └── azure-function.test.ts   # HTTP handler integration test
@@ -332,10 +335,12 @@ Notes:
   `BAD_USER_INPUT` when it is not valid.
 - `getUsers` sorts by name ascending and includes each user's pets; `getUser`
   looks users up by their UUID.
-- `PetLost.state` defaults to `"perdido"`; `PetLost.userId` and `PetLost.user`
-  are required.
-- `PhotoPetLost` exposes only `id`, `petId`, `pet`, and `url`; the internal
+- `PetLost.state` is the `PetStatus` enum (`LOST`/`FOUND`) and defaults to
+  `LOST`; `PetLost.userId` and `PetLost.user` are required.
+- `PhotoPetLost` exposes `id`, `petId`, `petLost`, `url`, and `key`; the internal
   `embedding` (vector) column is not exposed in GraphQL.
+- `createPhotoLostPet` shares its validation and persistence with the upload
+  endpoint through `src/server/express/services`.
 - Resolver signatures are typed from the generated `QueryResolvers` /
   `MutationResolvers`, so run `pnpm generate` after changing the SDL.
 
@@ -349,7 +354,7 @@ on both the standalone Express server and the Azure Functions host.
 `POST /api/upload/:idUser/:idPet` (`multipart/form-data`; `authLevel: "function"` in Azure):
 
 - Route parameters `idUser` and `idPet` must be valid UUIDs. Both are validated
-  by both transports; the image is not persisted in PostgreSQL yet.
+  by both transports.
 - Field name: `file`.
 - Allowed image types: JPEG, PNG, GIF, and WebP. The declared MIME type must
   match the file signature (magic bytes).
@@ -357,6 +362,11 @@ on both the standalone Express server and the Azure Functions host.
 - Files are uploaded to the configured Tigris bucket with the key
   `uploads/<idUser>/<idPet>/<YYYY-MM-DD>_<uuid>.<ext>` using
   `@tigrisdata/storage`; the date comes before the generated id.
+- After the upload, a `PhotoPetLost` row is created with the `key`, `url`, and
+  `petId`. The service also verifies that the pet belongs to `idUser`: `404`
+  when the pet does not exist and `400` when it belongs to another user.
+- If the database insert fails, the uploaded object is deleted from Tigris
+  before returning `500`, so no orphan objects are left behind.
 - Objects are uploaded with public access and a one-year immutable
   `Cache-Control`; the response includes the public `url`.
 - Credentials come from `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
@@ -364,7 +374,8 @@ on both the standalone Express server and the Azure Functions host.
   [Environment variables](#environment-variables)).
 - Validation lives in `src/server/express/uploads/imageUpload.ts` and is shared
   by the standalone Express route (`uploadRouter.ts`) and the Azure Functions
-  adapter.
+  adapter. Persistence lives in `src/server/express/services` and is
+  shared with the `createPhotoLostPet` mutation.
 
 Standalone server:
 
@@ -495,8 +506,10 @@ GraphQL request through the Functions handler.
 - Objects are uploaded as public by default. If the bucket policy forbids
   public access, adjust `src/server/infrastructure/tigris.ts` and serve private
   objects with signed URLs instead.
-- The upload endpoint does not persist rows in PostgreSQL yet: it only stores
-  the object in Tigris and returns its URL. `PhotoPetLost` already has `url`
-  (and an internal `embedding`), but no GraphQL mutation creates photo records.
+- The upload endpoint persists a `PhotoPetLost` row after the Tigris upload. If
+  the database insert fails, it deletes the object from Tigris; if that cleanup
+  also fails, the orphan object is logged but not retried automatically.
+- The upload endpoint stores `key` and `url`; the internal `embedding`
+  (vector) column remains unset until an embedding pipeline is added.
 - `azure-functions-core-tools` downloads the Core Tools binary on its first
   run; the first `func start` can take a while.

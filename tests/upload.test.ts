@@ -3,16 +3,18 @@ import type { HttpResponseInit } from "@azure/functions";
 import express from "express";
 import { createServer } from "node:http";
 
-const { put } = vi.hoisted(() => {
+const { put, remove, createPhotoLostPet } = vi.hoisted(() => {
   process.env.S3_BUCKET = "test-bucket";
   process.env.S3_ACCESS_KEY_ID = "test-access-key";
   process.env.S3_SECRET_ACCESS_KEY = "test-secret-key";
   process.env.S3_ENDPOINT = "https://t3.storage.dev";
+  process.env.DATABASE_URL = "postgresql://user:pass@localhost:5432/test";
 
-  return { put: vi.fn() };
+  return { put: vi.fn(), remove: vi.fn(), createPhotoLostPet: vi.fn() };
 });
 
-vi.mock("@tigrisdata/storage", () => ({ put }));
+vi.mock("@tigrisdata/storage", () => ({ put, remove }));
+vi.mock("../src/server/services/photoPetLost.ts", () => ({ createPhotoLostPet }));
 
 import { MAX_FILE_SIZE_BYTES } from "../src/server/express/uploads/imageUpload.ts";
 import { uploadHandler } from "../src/server/functions/uploadHandler.ts";
@@ -83,6 +85,12 @@ async function startStandaloneUploadServer(): Promise<{
 
 beforeEach(() => {
   put.mockReset();
+  remove.mockReset();
+  createPhotoLostPet.mockReset();
+  createPhotoLostPet.mockResolvedValue({
+    ok: true,
+    photo: { id: "photo-id", petId: PET_ID, key: "photo-key", url: "https://photo" },
+  });
   put.mockImplementation(async (key: string, body: Buffer, options?: { contentType?: string }) => ({
     data: {
       path: key,
@@ -115,6 +123,12 @@ describe("upload handler", () => {
     expect(put).toHaveBeenCalledTimes(1);
     const [key, uploadedBuffer, options] = put.mock.calls[0] ?? [];
     expect(key).toBe(`uploads/${USER_ID}/${PET_ID}/${body.filename}`);
+    expect(createPhotoLostPet).toHaveBeenCalledWith(expect.anything(), {
+      key: `uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+      url: `https://test-bucket.t3.storage.dev/uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+      petId: PET_ID,
+      idUser: USER_ID,
+    });
     expect(Buffer.isBuffer(uploadedBuffer)).toBe(true);
     expect(options).toMatchObject({
       access: "public",
@@ -148,9 +162,48 @@ describe("upload handler", () => {
         `https://test-bucket.t3.storage.dev/uploads/${USER_ID}/${PET_ID}/${body.filename}`,
       );
       expect(put).toHaveBeenCalledTimes(1);
+      expect(createPhotoLostPet).toHaveBeenCalledWith(expect.anything(), {
+        key: `uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+        url: `https://test-bucket.t3.storage.dev/uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+        petId: PET_ID,
+        idUser: USER_ID,
+      });
     } finally {
       await standalone.close();
     }
+  });
+
+  it("elimina el objeto si la mascota no pertenece al usuario", async () => {
+    createPhotoLostPet.mockResolvedValueOnce({
+      ok: false,
+      status: 400,
+      error: "La mascota no pertenece al usuario",
+    });
+    const file = new File([PNG_BYTES], "mascota.png", { type: "image/png" });
+
+    const response = (await uploadHandler(
+      uploadRequest(file) as never,
+      context,
+    )) as HttpResponseInit;
+
+    expect(response.status).toBe(400);
+    expect((response.jsonBody as UploadResponse).error).toMatch(/no pertenece/i);
+    expect(remove).toHaveBeenCalledTimes(1);
+  });
+
+  it("responde 500 y elimina el objeto si falla la persistencia", async () => {
+    createPhotoLostPet.mockRejectedValueOnce(new Error("db caída"));
+    const file = new File([PNG_BYTES], "mascota.png", { type: "image/png" });
+
+    const response = (await uploadHandler(
+      uploadRequest(file) as never,
+      context,
+    )) as HttpResponseInit;
+
+    expect(response.status).toBe(500);
+    expect((response.jsonBody as UploadResponse).error).toBe("No se pudo guardar el archivo");
+    expect(JSON.stringify(response.jsonBody)).not.toContain("db caída");
+    expect(remove).toHaveBeenCalledTimes(1);
   });
 
   it("rechaza un id de usuario inválido en el handler de Azure", async () => {

@@ -14,7 +14,7 @@ type PetLost {
     race: String
     state: String!
     createdAt: DateTime!
-    photos: [PhotoPetLost!]!
+    photos: [PhotoPetLost!]
     userId: String!
     user: User!
 }

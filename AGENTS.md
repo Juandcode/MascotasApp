@@ -81,11 +81,15 @@ pnpm azure:dev        # build + func start
   `multipart/form-data` with a `file` field and delegates to
   `src/server/express/uploads/imageUpload.ts`.
 - `src/server/express/uploads/imageUpload.ts`: shared upload validation
-  (JPEG/PNG/GIF/WebP up to 15 MB, magic bytes) and Tigris upload. Used by both
-  the standalone route and the Azure Functions adapter.
+  (JPEG/PNG/GIF/WebP up to 15 MB, magic bytes), Tigris upload, and the
+  `PhotoPetLost` insert. Used by both the standalone route and the Azure
+  Functions adapter.
 - `src/server/express/uploads/uploadRouter.ts`: Express router for
   `POST /api/upload/:idUser/:idPet`, using `multer` memory storage and the shared
   upload processor.
+- `src/server/express/services`: shared `PhotoPetLost` persistence
+  (zod validation, optional pet-ownership check, Prisma insert). Used by the
+  upload endpoint and the `createPhotoLostPet` mutation.
 - `src/server/graphql/loggingPlugin.ts`: Apollo plugin that logs operation start,
   duration, and error codes with `console.log`/`console.error`.
 - `src/server/graphql/schema.graphql`: GraphQL SDL, the source of truth
@@ -108,10 +112,10 @@ pnpm azure:dev        # build + func start
   gitignored).
 - `src/server/infrastructure/prisma.ts`: single `PrismaClient` instance with
   `PrismaPg` and `.env` loading via `dotenv/config`.
-- `src/server/infrastructure/tigris.ts`: `uploadImage()` wrapper around
-  `@tigrisdata/storage` `put()`; reads `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
-  `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` lazily, uploads public objects with
-  a UUID key, and returns `{ key, url, size, mimetype }`.
+- `src/server/infrastructure/tigris.ts`: `uploadImage()` and `deleteImage()`
+  wrappers around `@tigrisdata/storage` `put()`/`remove()`; reads `S3_BUCKET`,
+  `S3_ACCESS_KEY_ID`, `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` lazily, uploads
+  public objects, and returns `{ key, url, size, mimetype }`.
 - `prisma7.config.ts`: Prisma 7 config (schema, migrations, datasource URL).
 - `scripts/copy-sdl.mjs`: copies `schema.graphql` to
   `dist/src/server/graphql/schema.graphql` as part of `pnpm build`, so the
@@ -127,8 +131,10 @@ Azure request flow: HTTP `/api/graphql` -> `graphqlHandler` -> Apollo Server
 Upload flow: HTTP `/api/upload/:idUser/:idPet` (standalone Express or Azure Functions)
 -> `idUser`/`idPet` UUID validation -> multipart validation -> `src/server/express/uploads/imageUpload.ts` ->
 `src/server/infrastructure/tigris.ts` -> `@tigrisdata/storage` `put()` ->
-`uploads/<idUser>/<idPet>/<YYYY-MM-DD>_<uuid>.<ext>` in the Tigris bucket. Both
-transports share the same validation and upload code.
+`uploads/<idUser>/<idPet>/<YYYY-MM-DD>_<uuid>.<ext>` in the Tigris bucket ->
+`src/server/express/services` verifies the pet belongs to `idUser` and
+inserts the `PhotoPetLost` row. If the insert fails, `deleteImage()` removes the
+object. Both transports share the same validation, upload, and persistence code.
 
 ## Required conventions
 
@@ -147,6 +153,9 @@ transports share the same validation and upload code.
   JSON bodies), accept only images up to 15 MB, verify the content signature,
   generate UUID filenames, and never trust client filenames. The route is
   `POST /api/upload/:idUser/:idPet` and both ids must be UUIDs.
+- Persist `PhotoPetLost` through `src/server/express/services`; do not
+  duplicate the insert in the upload handler or the mutation. If the insert
+  fails after a Tigris upload, delete the object with `deleteImage()`.
 - Uploads go through `src/server/infrastructure/tigris.ts`; do not import `@tigrisdata/storage`
   directly from handlers or resolvers. Never hardcode bucket credentials.
 - Keep upload validation in `src/server/express/uploads/imageUpload.ts`; both
@@ -178,9 +187,12 @@ transports share the same validation and upload code.
   `user` delegate is mocked (e.g. `{ db: { petLost: delegate } }`).
 - For the HTTP handler, build a `Request` and assert the response (see
   `tests/azure-function.test.ts`).
-- For uploads, build a `FormData` request, set dummy `S3_*` env vars before
-  importing the handler, and mock `@tigrisdata/storage` `put()` (see
-  `tests/upload.test.ts`). Do not require real credentials in tests.
+- For uploads, build a `FormData` request, set dummy `S3_*` and `DATABASE_URL`
+  env vars before importing the handler, and mock `@tigrisdata/storage`
+  `put()`/`remove()` plus `src/server/express/services` (see
+  `tests/upload.test.ts`). Do not require real credentials or a database.
+- For `createPhotoLostPet` and the ownership check, call the service with a
+  mocked `{ petLost, photoPetLost }` delegate (see `tests/photoPetLost.test.ts`).
 - Test the standalone upload route by mounting
   `src/server/express/uploads/uploadRouter.ts` on a real Express app and
   listening on an ephemeral port; close all connections after the test.
@@ -240,9 +252,11 @@ delivery.
   configuration or a storage error makes `POST /api/upload/:idUser/:idPet` return `500`.
 - Objects are uploaded with public access. If the bucket forbids public objects,
   change `src/server/infrastructure/tigris.ts` to private access and return signed URLs.
-- The upload endpoint does not persist rows in PostgreSQL yet: it only stores
-  the object in Tigris and returns its URL. `PhotoPetLost` already has `url`
-  (and an internal `embedding`), but no GraphQL mutation creates photo records.
+- The upload endpoint persists a `PhotoPetLost` row after the Tigris upload. If
+  the insert fails, it calls `deleteImage()`; if that cleanup also fails, the
+  orphan object is only logged.
+- The upload endpoint stores `key` and `url`; `embedding` remains unset until an
+  embedding pipeline is added.
 - Azure Functions only forwards `console.*` output to Application Insights when
   `APPLICATIONINSIGHTS_CONNECTION_STRING` is configured in the Function App.
 - `azure-functions-core-tools` downloads the Core Tools binary on its first

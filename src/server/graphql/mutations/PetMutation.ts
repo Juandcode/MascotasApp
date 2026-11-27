@@ -1,6 +1,7 @@
 import type { MutationResolvers } from "../../../generated/graphql.js";
 import { z } from "zod";
 import { GraphQLError } from "graphql";
+import { createPhotoLostPet as createPhotoLostPetRecord } from "../../express/services/photoPetLost.ts";
 
 const CreateLostPetSchema = z.object({
   name: z.string().min(1),
@@ -8,11 +9,6 @@ const CreateLostPetSchema = z.object({
   color: z.string().nullable().optional(),
   race: z.string().nullable().optional(),
   userId: z.uuid(),
-});
-const CreatePhotoLostPetSchema = z.object({
-  key: z.string().min(1),
-  url: z.string().min(1),
-  petId: z.uuid(),
 });
 
 const createLostPet: MutationResolvers["createLostPet"] = async (_, args, contextValue) => {
@@ -38,21 +34,18 @@ const createPhotoLostPet: MutationResolvers["createPhotoLostPet"] = async (
   args,
   contextValue,
 ) => {
-  const parsed = CreatePhotoLostPetSchema.safeParse(args.input);
+  const result = await createPhotoLostPetRecord(args.input, contextValue.db);
 
-  if (!parsed.success) {
-    throw new GraphQLError("Error de validación en los datos enviados", {
+  if (!result.ok) {
+    throw new GraphQLError(result.error, {
       extensions: {
-        code: "BAD_USER_INPUT",
-        validationErrors: z.flattenError(parsed.error).fieldErrors,
+        code: result.status === 404 ? "NOT_FOUND" : "BAD_USER_INPUT",
+        ...(result.fieldErrors ? { validationErrors: result.fieldErrors } : {}),
       },
     });
   }
 
-  return contextValue.db.photoPetLost.create({
-    data: parsed.data,
-    include: { petLost: true },
-  });
+  return result.photo;
 };
 
 export { createLostPet, createPhotoLostPet };

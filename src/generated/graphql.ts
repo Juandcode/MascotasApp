@@ -63,7 +63,7 @@ export type PetLost = {
   createdAt: Scalars['DateTime']['output'];
   id: Scalars['ID']['output'];
   name: Scalars['String']['output'];
-  photos: Array<PhotoPetLost>;
+  photos?: Maybe<Array<PhotoPetLost>>;
   race?: Maybe<Scalars['String']['output']>;
   state: Scalars['String']['output'];
   user: User;
@@ -230,7 +230,7 @@ export type PetLostResolvers<ContextType = MyContext, ParentType extends Resolve
   createdAt?: Resolver<ResolversTypes['DateTime'], ParentType, ContextType>;
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
   name?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
-  photos?: Resolver<Array<ResolversTypes['PhotoPetLost']>, ParentType, ContextType>;
+  photos?: Resolver<Maybe<Array<ResolversTypes['PhotoPetLost']>>, ParentType, ContextType>;
   race?: Resolver<Maybe<ResolversTypes['String']>, ParentType, ContextType>;
   state?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   user?: Resolver<ResolversTypes['User'], ParentType, ContextType>;

@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { put } from "@tigrisdata/storage";
+import { put, remove } from "@tigrisdata/storage";
 
 type TigrisConfig = {
   bucket: string;
@@ -59,4 +59,12 @@ export async function uploadImage(
     size: result.data.size,
     mimetype: result.data.contentType ?? contentType,
   };
+}
+
+export async function deleteImage(key: string): Promise<void> {
+  const result = await remove(key, { config: getTigrisConfig() });
+
+  if (result.error) {
+    throw new Error(`No se pudo eliminar la imagen de Tigris: ${result.error.message}`);
+  }
 }

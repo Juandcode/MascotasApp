@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { uploadImage } from "../../infrastructure/tigris.ts";
+import { deleteImage, uploadImage, type UploadedImage } from "../../infrastructure/tigris.ts";
+import { createPhotoLostPet } from "../services/photoPetLost.ts";
 
 export const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024;
 export const MAX_REQUEST_SIZE_BYTES = MAX_FILE_SIZE_BYTES + 1024 * 1024;
@@ -31,7 +32,7 @@ export type UploadedImageMetadata = {
 
 export type ImageUploadResult =
   | { ok: true; status: 201; body: UploadedImageMetadata }
-  | { ok: false; status: 400 | 500; error: string };
+  | { ok: false; status: 400 | 404 | 500; error: string };
 
 function sniffImageMimeType(buffer: Buffer): string | undefined {
   if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
@@ -89,6 +90,15 @@ function formatUploadDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+async function removeUploadedImage(key: string): Promise<void> {
+  try {
+    await deleteImage(key);
+    console.log(`[upload] rollback key=${key}`);
+  } catch (error) {
+    console.error(`[upload] rollback failure key=${key}`, error);
+  }
+}
+
 export async function processImageUpload(input: ImageUploadInput): Promise<ImageUploadResult> {
   const validation = validateImageInput(input);
   if (!validation.ok) {
@@ -106,30 +116,55 @@ export async function processImageUpload(input: ImageUploadInput): Promise<Image
     `[upload] start key=${key} size=${input.buffer.length} mimetype=${validation.mimetype}`,
   );
 
+  let uploaded: UploadedImage;
   try {
-    const uploaded = await uploadImage(key, input.buffer, validation.mimetype);
-
-    console.log(
-      `[upload] success key=${uploaded.key} size=${uploaded.size} mimetype=${uploaded.mimetype} durationMs=${Date.now() - startedAt}`,
-    );
-
-    return {
-      ok: true,
-      status: 201,
-      body: {
-        filename,
-        key: uploaded.key,
-        url: uploaded.url,
-        size: uploaded.size,
-        mimetype: uploaded.mimetype,
-      },
-    };
+    uploaded = await uploadImage(key, input.buffer, validation.mimetype);
   } catch (error) {
     console.error(
-      `[upload] failure key=${key} size=${input.buffer.length} mimetype=${validation.mimetype} durationMs=${Date.now() - startedAt}`,
+      `[upload] storage failure key=${key} size=${input.buffer.length} mimetype=${validation.mimetype} durationMs=${Date.now() - startedAt}`,
       error,
     );
-
     return { ok: false, status: 500, error: "No se pudo guardar el archivo" };
   }
+
+  let persisted: Awaited<ReturnType<typeof createPhotoLostPet>>;
+  try {
+    persisted = await createPhotoLostPet({
+      key: uploaded.key,
+      url: uploaded.url,
+      petId: input.idPet,
+      idUser: input.idUser,
+    });
+  } catch (error) {
+    console.error(
+      `[upload] persistence failure key=${uploaded.key} durationMs=${Date.now() - startedAt}`,
+      error,
+    );
+    await removeUploadedImage(uploaded.key);
+    return { ok: false, status: 500, error: "No se pudo guardar el archivo" };
+  }
+
+  if (!persisted.ok) {
+    console.log(
+      `[upload] rejected status=${persisted.status} key=${uploaded.key} reason=${persisted.error}`,
+    );
+    await removeUploadedImage(uploaded.key);
+    return { ok: false, status: persisted.status, error: persisted.error };
+  }
+
+  console.log(
+    `[upload] success key=${uploaded.key} photoId=${persisted.photo.id} size=${uploaded.size} mimetype=${uploaded.mimetype} durationMs=${Date.now() - startedAt}`,
+  );
+
+  return {
+    ok: true,
+    status: 201,
+    body: {
+      filename,
+      key: uploaded.key,
+      url: uploaded.url,
+      size: uploaded.size,
+      mimetype: uploaded.mimetype,
+    },
+  };
 }
