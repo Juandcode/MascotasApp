@@ -4,7 +4,8 @@ import { GraphQLError } from "graphql";
 import { z } from "zod";
 
 export const getPets: QueryResolvers["pets"] = (_, __, contextValue) =>
-  contextValue.db.pet.findMany({ orderBy: { createdAt: "desc" }, include: { user: true } });
+  contextValue.db.petLost.findMany({ orderBy: { createdAt: "desc" }, include: { user: true } });
+
 
 export const getPet: QueryResolvers["pet"] = (_, args, contextValue) => {
   const parsed = z.uuid().safeParse(args.id);
@@ -17,7 +18,7 @@ export const getPet: QueryResolvers["pet"] = (_, args, contextValue) => {
       },
     });
   }
-  return contextValue.db.pet.findUnique({
+  return contextValue.db.petLost.findUnique({
     where: { id: parsed.data },
     include: { user: true },
   });

@@ -1,51 +1,64 @@
 scalar DateTime
 
 type User {
-  id: ID!
-  name: String!
-  pets: [PetLost!]!
+    id: ID!
+    name: String!
+    pets: [PetLost!]!
 }
 
 type PetLost {
-  id: ID!
-  name: String!
-  contact: String
-  color: String
-  race: String
-  state: String!
-  createdAt: DateTime!
-  photos: [PhotoPetLost!]!
-  userId: String!
-  user: User!
+    id: ID!
+    name: String!
+    contact: String
+    color: String
+    race: String
+    state: String!
+    createdAt: DateTime!
+    photos: [PhotoPetLost!]!
+    userId: String!
+    user: User!
 }
 
 type PhotoPetLost {
-  id: ID!
-  petId: String!
-  pet: PetLost!
-  url: String!
-  # embedding NO se expone en GraphQL: es Unsupported(vector) y solo sirve para búsqueda interna
+    id: ID!
+    petId: String!
+    petLost: PetLost!
+    url: String!
+    key: String!
+    # embedding NO se expone en GraphQL: es Unsupported(vector) y solo sirve para búsqueda interna
+}
+enum PetStatus {
+    LOST,
+    FOUND,
 }
 input CreateLostPetInput {
-  name: String!
-  contact: String
-  color: String
-  race: String
+    name: String!
+    contact: String
+    color: String
+    race: String
+    status: PetStatus!
+    userId: String!
+}
+
+input CreatePhotoLostPetInput {
+    key: String!
+    url: String!
+    petId: String!
 }
 
 input CreateUserInput {
-  name: String!
+    name: String!
 }
 
 type Query {
-  pets: [PetLost!]!
-  pet(id: ID!): PetLost
-  users: [User!]!
-  user(id: ID!): User
+    pets: [PetLost!]!
+    pet(id: ID!): PetLost
+    users: [User!]!
+    user(id: ID!): User
 }
 
 type Mutation {
-  createLostPet(input: CreateLostPetInput!): PetLost!
-  createLostPet(input: CreateLostPetInput!): PetLost!
-  createUser(input: CreateUserInput!): User!
+    createLostPet(input: CreateLostPetInput!): PetLost!
+    createPhotoLostPet(input: CreatePhotoLostPetInput!): PhotoPetLost
+    createUser(input: CreateUserInput!): User!
 }

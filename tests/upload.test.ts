@@ -28,6 +28,8 @@ type UploadResponse = {
 };
 
 const PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const USER_ID = "8f1f0b18-6b33-4a1e-9b23-7a9f1a0f0f0f";
+const PET_ID = "1b7c2d34-5e6f-4a8b-9c0d-1e2f3a4b5c6d";
 
 const context = { error: vi.fn() } as never;
 
@@ -37,14 +39,16 @@ function uploadRequest(file?: File): Request {
     form.append("file", file);
   }
 
-  return new Request("http://localhost/api/upload", {
+  const request = new Request(`http://localhost/api/upload/${USER_ID}/${PET_ID}`, {
     method: "POST",
     body: form,
   });
+
+  return Object.assign(request, { params: { idUser: USER_ID, idPet: PET_ID } });
 }
 
 async function startStandaloneUploadServer(): Promise<{
-  url: string;
+  baseUrl: string;
   close: () => Promise<void>;
 }> {
   const app = express();
@@ -62,7 +66,7 @@ async function startStandaloneUploadServer(): Promise<{
   }
 
   return {
-    url: `http://127.0.0.1:${address.port}/api/upload`,
+    baseUrl: `http://127.0.0.1:${address.port}/api/upload`,
     close: () =>
       new Promise<void>((resolve, reject) => {
         server.closeAllConnections();
@@ -100,15 +104,17 @@ describe("upload handler", () => {
     const body = response.jsonBody as UploadResponse;
 
     expect(response.status).toBe(201);
-    expect(body.filename).toMatch(/^[0-9a-f-]{36}\.png$/);
-    expect(body.key).toBe(`uploads/${body.filename}`);
-    expect(body.url).toBe(`https://test-bucket.t3.storage.dev/uploads/${body.filename}`);
+    expect(body.filename).toMatch(/^\d{4}-\d{2}-\d{2}_[0-9a-f-]{36}\.png$/);
+    expect(body.key).toBe(`uploads/${USER_ID}/${PET_ID}/${body.filename}`);
+    expect(body.url).toBe(
+      `https://test-bucket.t3.storage.dev/uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+    );
     expect(body.size).toBe(PNG_BYTES.length);
     expect(body.mimetype).toBe("image/png");
 
     expect(put).toHaveBeenCalledTimes(1);
     const [key, uploadedBuffer, options] = put.mock.calls[0] ?? [];
-    expect(key).toBe(`uploads/${body.filename}`);
+    expect(key).toBe(`uploads/${USER_ID}/${PET_ID}/${body.filename}`);
     expect(Buffer.isBuffer(uploadedBuffer)).toBe(true);
     expect(options).toMatchObject({
       access: "public",
@@ -129,17 +135,89 @@ describe("upload handler", () => {
       const form = new FormData();
       form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
 
-      const response = await fetch(standalone.url, {
+      const response = await fetch(`${standalone.baseUrl}/${USER_ID}/${PET_ID}`, {
         method: "POST",
         body: form,
       });
       const body = (await response.json()) as UploadResponse;
 
       expect(response.status).toBe(201);
-      expect(body.filename).toMatch(/^[0-9a-f-]{36}\.png$/);
-      expect(body.key).toBe(`uploads/${body.filename}`);
-      expect(body.url).toBe(`https://test-bucket.t3.storage.dev/uploads/${body.filename}`);
+      expect(body.filename).toMatch(/^\d{4}-\d{2}-\d{2}_[0-9a-f-]{36}\.png$/);
+      expect(body.key).toBe(`uploads/${USER_ID}/${PET_ID}/${body.filename}`);
+      expect(body.url).toBe(
+        `https://test-bucket.t3.storage.dev/uploads/${USER_ID}/${PET_ID}/${body.filename}`,
+      );
       expect(put).toHaveBeenCalledTimes(1);
+    } finally {
+      await standalone.close();
+    }
+  });
+
+  it("rechaza un id de usuario inválido en el handler de Azure", async () => {
+    const form = new FormData();
+    form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
+    const request = Object.assign(
+      new Request(`http://localhost/api/upload/123/${PET_ID}`, { method: "POST", body: form }),
+      { params: { idUser: "123", idPet: PET_ID } },
+    );
+
+    const response = (await uploadHandler(request as never, context)) as HttpResponseInit;
+
+    expect(response.status).toBe(400);
+    expect((response.jsonBody as UploadResponse).error).toMatch(/id de usuario/i);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("rechaza un id de mascota inválido en el handler de Azure", async () => {
+    const form = new FormData();
+    form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
+    const request = Object.assign(
+      new Request(`http://localhost/api/upload/${USER_ID}/123`, { method: "POST", body: form }),
+      { params: { idUser: USER_ID, idPet: "123" } },
+    );
+
+    const response = (await uploadHandler(request as never, context)) as HttpResponseInit;
+
+    expect(response.status).toBe(400);
+    expect((response.jsonBody as UploadResponse).error).toMatch(/id de mascota/i);
+    expect(put).not.toHaveBeenCalled();
+  });
+
+  it("rechaza un id de usuario inválido en el servidor standalone", async () => {
+    const standalone = await startStandaloneUploadServer();
+
+    try {
+      const form = new FormData();
+      form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
+
+      const response = await fetch(`${standalone.baseUrl}/123/${PET_ID}`, {
+        method: "POST",
+        body: form,
+      });
+
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as UploadResponse).error).toMatch(/id de usuario/i);
+      expect(put).not.toHaveBeenCalled();
+    } finally {
+      await standalone.close();
+    }
+  });
+
+  it("rechaza un id de mascota inválido en el servidor standalone", async () => {
+    const standalone = await startStandaloneUploadServer();
+
+    try {
+      const form = new FormData();
+      form.append("file", new File([PNG_BYTES], "mascota.png", { type: "image/png" }));
+
+      const response = await fetch(`${standalone.baseUrl}/${USER_ID}/123`, {
+        method: "POST",
+        body: form,
+      });
+
+      expect(response.status).toBe(400);
+      expect(((await response.json()) as UploadResponse).error).toMatch(/id de mascota/i);
+      expect(put).not.toHaveBeenCalled();
     } finally {
       await standalone.close();
     }

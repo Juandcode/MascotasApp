@@ -17,6 +17,8 @@ const IMAGE_EXTENSIONS: Readonly<Record<string, string>> = {
 export type ImageUploadInput = {
   buffer: Buffer;
   mimetype: string;
+  idUser: string;
+  idPet: string;
 };
 
 export type UploadedImageMetadata = {
@@ -80,6 +82,13 @@ function validateImageInput(
   return { ok: true, mimetype: declaredMimeType, extension };
 }
 
+function formatUploadDate(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export async function processImageUpload(input: ImageUploadInput): Promise<ImageUploadResult> {
   const validation = validateImageInput(input);
   if (!validation.ok) {
@@ -89,8 +98,8 @@ export async function processImageUpload(input: ImageUploadInput): Promise<Image
     return { ok: false, status: 400, error: validation.error };
   }
 
-  const filename = `${randomUUID()}${validation.extension}`;
-  const key = `uploads/${filename}`;
+  const filename = `${formatUploadDate(new Date())}_${randomUUID()}${validation.extension}`;
+  const key = `uploads/${input.idUser}/${input.idPet}/${filename}`;
   const startedAt = Date.now();
 
   console.log(

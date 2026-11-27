@@ -20,6 +20,14 @@ export type CreateLostPetInput = {
   contact?: InputMaybe<Scalars['String']['input']>;
   name: Scalars['String']['input'];
   race?: InputMaybe<Scalars['String']['input']>;
+  status: PetStatus;
+  userId: Scalars['String']['input'];
+};
+
+export type CreatePhotoLostPetInput = {
+  key: Scalars['String']['input'];
+  petId: Scalars['String']['input'];
+  url: Scalars['String']['input'];
 };
 
 export type CreateUserInput = {
@@ -29,12 +37,18 @@ export type CreateUserInput = {
 export type Mutation = {
   __typename?: 'Mutation';
   createLostPet: PetLost;
+  createPhotoLostPet?: Maybe<PhotoPetLost>;
   createUser: User;
 };
 
 
 export type MutationCreateLostPetArgs = {
   input: CreateLostPetInput;
+};
+
+
+export type MutationCreatePhotoLostPetArgs = {
+  input: CreatePhotoLostPetInput;
 };
 
 
@@ -56,11 +70,17 @@ export type PetLost = {
   userId: Scalars['String']['output'];
 };
 
+export enum PetStatus {
+  Found = 'FOUND',
+  Lost = 'LOST'
+}
+
 export type PhotoPetLost = {
   __typename?: 'PhotoPetLost';
   id: Scalars['ID']['output'];
-  pet: PetLost;
+  key: Scalars['String']['output'];
   petId: Scalars['String']['output'];
+  petLost: PetLost;
   url: Scalars['String']['output'];
 };
 
@@ -165,12 +185,14 @@ export type DirectiveResolverFn<TResult = Record<PropertyKey, never>, TParent = 
 export type ResolversTypes = ResolversObject<{
   Boolean: ResolverTypeWrapper<Scalars['Boolean']['output']>;
   CreateLostPetInput: CreateLostPetInput;
+  CreatePhotoLostPetInput: CreatePhotoLostPetInput;
   CreateUserInput: CreateUserInput;
   DateTime: ResolverTypeWrapper<Scalars['DateTime']['output']>;
   ID: ResolverTypeWrapper<Scalars['ID']['output']>;
   Mutation: ResolverTypeWrapper<Record<PropertyKey, never>>;
   PetLost: ResolverTypeWrapper<PetLostModel>;
-  PhotoPetLost: ResolverTypeWrapper<Omit<PhotoPetLost, 'pet'> & { pet: ResolversTypes['PetLost'] }>;
+  PetStatus: PetStatus;
+  PhotoPetLost: ResolverTypeWrapper<Omit<PhotoPetLost, 'petLost'> & { petLost: ResolversTypes['PetLost'] }>;
   Query: ResolverTypeWrapper<Record<PropertyKey, never>>;
   String: ResolverTypeWrapper<Scalars['String']['output']>;
   User: ResolverTypeWrapper<UserModel>;
@@ -180,12 +202,13 @@ export type ResolversTypes = ResolversObject<{
 export type ResolversParentTypes = ResolversObject<{
   Boolean: Scalars['Boolean']['output'];
   CreateLostPetInput: CreateLostPetInput;
+  CreatePhotoLostPetInput: CreatePhotoLostPetInput;
   CreateUserInput: CreateUserInput;
   DateTime: Scalars['DateTime']['output'];
   ID: Scalars['ID']['output'];
   Mutation: Record<PropertyKey, never>;
   PetLost: PetLostModel;
-  PhotoPetLost: Omit<PhotoPetLost, 'pet'> & { pet: ResolversParentTypes['PetLost'] };
+  PhotoPetLost: Omit<PhotoPetLost, 'petLost'> & { petLost: ResolversParentTypes['PetLost'] };
   Query: Record<PropertyKey, never>;
   String: Scalars['String']['output'];
   User: UserModel;
@@ -197,6 +220,7 @@ export interface DateTimeScalarConfig extends GraphQLScalarTypeConfig<ResolversT
 
 export type MutationResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['Mutation'] = ResolversParentTypes['Mutation']> = ResolversObject<{
   createLostPet?: Resolver<ResolversTypes['PetLost'], ParentType, ContextType, RequireFields<MutationCreateLostPetArgs, 'input'>>;
+  createPhotoLostPet?: Resolver<Maybe<ResolversTypes['PhotoPetLost']>, ParentType, ContextType, RequireFields<MutationCreatePhotoLostPetArgs, 'input'>>;
   createUser?: Resolver<ResolversTypes['User'], ParentType, ContextType, RequireFields<MutationCreateUserArgs, 'input'>>;
 }>;
 
@@ -215,8 +239,9 @@ export type PetLostResolvers<ContextType = MyContext, ParentType extends Resolve
 
 export type PhotoPetLostResolvers<ContextType = MyContext, ParentType extends ResolversParentTypes['PhotoPetLost'] = ResolversParentTypes['PhotoPetLost']> = ResolversObject<{
   id?: Resolver<ResolversTypes['ID'], ParentType, ContextType>;
-  pet?: Resolver<ResolversTypes['PetLost'], ParentType, ContextType>;
+  key?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
   petId?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
+  petLost?: Resolver<ResolversTypes['PetLost'], ParentType, ContextType>;
   url?: Resolver<ResolversTypes['String'], ParentType, ContextType>;
 }>;
 

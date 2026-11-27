@@ -1,17 +1,20 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "../src/generated/prisma/client.ts";
 import type { MyContext } from "../src/server/context.ts";
-import { createPet } from "../src/server/graphql/mutations/PetMutation.ts";
+import { createLostPet } from "../src/server/graphql/mutations/PetMutation.ts";
 import { getPet, getPets } from "../src/server/graphql/queries/PetQuery.ts";
 
-type PetDelegate = PrismaClient["pet"];
+type PetLostDelegate = PrismaClient["petLost"];
 
 const pet = {
-  id: 1,
+  id: "0f3b9a2e-4c1d-4f7a-9e2b-1a2b3c4d5e6f",
   name: "Michi",
-  species: "Gato",
-  age: 2,
+  contact: "+52 555 000 0000",
+  color: "negro",
+  race: "gato",
+  state: "perdido",
   createdAt: new Date("2026-01-01T00:00:00.000Z"),
+  userId: "8f1f0b18-6b33-4a1e-9b23-7a9f1a0f0f0f",
 };
 
 function createContext() {
@@ -22,13 +25,13 @@ function createContext() {
   };
 
   const context = {
-    db: { pet: delegate as unknown as PetDelegate },
+    db: { petLost: delegate as unknown as PetLostDelegate },
   } as MyContext;
 
   return { delegate, context };
 }
 
-describe("Pet queries", () => {
+describe("PetLost queries", () => {
   it("returns pets ordered by createdAt desc", async () => {
     const { delegate, context } = createContext();
     const pets = await getPets({}, {}, context, {} as never);
@@ -40,36 +43,40 @@ describe("Pet queries", () => {
     });
   });
 
-  it("converts the string id to a number", async () => {
+  it("looks up a pet by UUID", async () => {
     const { delegate, context } = createContext();
-    const petById = await getPet({}, { id: "1" }, context, {} as never);
+    const petById = await getPet({}, { id: pet.id }, context, {} as never);
 
     expect(petById).toEqual(pet);
     expect(delegate.findUnique).toHaveBeenCalledWith({
-      where: { id: 1 },
+      where: { id: pet.id },
       include: { user: true },
     });
   });
 
-  it("rejects an id that is not an integer", async () => {
+  it("rejects an id that is not a UUID", async () => {
     const { delegate, context } = createContext();
 
-    await expect(async () => getPet({}, { id: "abc" }, context, {} as never)).rejects.toMatchObject(
-      {
-        extensions: { code: "BAD_USER_INPUT" },
-      },
-    );
+    await expect(async () => getPet({}, { id: "1" }, context, {} as never)).rejects.toMatchObject({
+      extensions: { code: "BAD_USER_INPUT" },
+    });
     expect(delegate.findUnique).not.toHaveBeenCalled();
   });
 });
 
-describe("Pet mutations", () => {
-  it("creates a pet with the provided input", async () => {
+describe("PetLost mutations", () => {
+  it("creates a lost pet with the provided input", async () => {
     const { delegate, context } = createContext();
-    const input = { name: "Michi", species: "Gato", age: 2 };
-    const created = await createPet({}, { input }, context, {} as never);
+    const input = {
+      name: "Michi",
+      contact: "+52 555 000 0000",
+      color: "negro",
+      race: "gato",
+      userId: pet.userId,
+    };
+    const created = await createLostPet({}, { input }, context, {} as never);
 
     expect(created).toEqual(pet);
-    expect(delegate.create).toHaveBeenCalledWith({ data: input });
+    expect(delegate.create).toHaveBeenCalledWith({ data: input, include: { user: true } });
   });
 });

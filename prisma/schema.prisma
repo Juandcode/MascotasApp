@@ -10,31 +10,39 @@ datasource db {
 }
 
 model User {
-  id   String @id @default(uuid())
+  id   String    @id @default(uuid())
   name String
   pets PetLost[]
+
   @@map("user")
 }
 
+enum PetStatus {
+  LOST
+  FOUND
+}
+
 model PetLost {
-  id        String   @id @default(uuid())
-  name   String
-  contact String?
-  color    String?
-  race     String?
-  state   String        @default("perdido")
-  createdAt DateTime      @default(now()) @map("created_at")
+  id        String         @id @default(uuid())
+  name      String
+  contact   String?
+  color     String?
+  race      String?
+  state     PetStatus      @default(LOST)
+  createdAt DateTime       @default(now()) @map("created_at")
   photos    PhotoPetLost[]
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
+  userId    String         @map("user_id")
+  user      User           @relation(fields: [userId], references: [id])
+
   @@map("pet_lost")
 }
 
 model PhotoPetLost {
   id        String                      @id @default(uuid())
   petId     String                      @map("pet_id")
-  pet       PetLost                     @relation(fields: [petId], references: [id], onDelete: Cascade)
+  petLost   PetLost                     @relation(fields: [petId], references: [id], onDelete: Cascade)
   url       String
+  key       String
   embedding Unsupported("vector(768)")?
 
   @@map("photopet_lost")

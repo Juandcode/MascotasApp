@@ -1,12 +1,10 @@
 //import {prisma} from "../infrastructure/prisma.ts";
-import { createPet } from "./mutations/PetMutation.ts";
+import { createLostPet, createPhotoLostPet } from "./mutations/PetMutation.ts";
 import { createUser } from "./mutations/UserMutation.ts";
 import { getPet, getPets } from "./queries/PetQuery.ts";
 import { getUser, getUsers } from "./queries/UserQuery.ts";
 import { DateTimeResolver } from "graphql-scalars";
 import { Resolvers } from "../../generated/graphql.js";
-
-//const petDelegate = prisma.pet;
 
 export const resolvers: Resolvers = {
   Query: {
@@ -16,7 +14,8 @@ export const resolvers: Resolvers = {
     user: getUser,
   },
   Mutation: {
-    createPet: createPet,
+    createLostPet: createLostPet,
+    createPhotoLostPet: createPhotoLostPet,
     createUser: createUser,
   },
   DateTime: DateTimeResolver,

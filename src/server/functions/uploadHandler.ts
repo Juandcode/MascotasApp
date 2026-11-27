@@ -1,4 +1,5 @@
 import type { HttpHandler, HttpResponseInit } from "@azure/functions";
+import { z } from "zod";
 import {
   MAX_FILE_SIZE_BYTES,
   MAX_REQUEST_SIZE_BYTES,
@@ -32,6 +33,16 @@ export const uploadHandler: HttpHandler = async (request, context) => {
     return reject("El Content-Type debe ser multipart/form-data");
   }
 
+  const parsedIdUser = z.uuid().safeParse(request.params.idUser);
+  if (!parsedIdUser.success) {
+    return reject("El id de usuario no es válido");
+  }
+
+  const parsedIdPet = z.uuid().safeParse(request.params.idPet);
+  if (!parsedIdPet.success) {
+    return reject("El id de mascota no es válido");
+  }
+
   const contentLength = Number(request.headers.get("content-length") ?? "0");
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_SIZE_BYTES) {
     return reject("El archivo supera el máximo de 15 MB");
@@ -58,7 +69,12 @@ export const uploadHandler: HttpHandler = async (request, context) => {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const result = await processImageUpload({ buffer, mimetype: file.type });
+  const result = await processImageUpload({
+    buffer,
+    mimetype: file.type,
+    idUser: parsedIdUser.data,
+    idPet: parsedIdPet.data,
+  });
 
   console.log(
     `[http] upload response status=${result.status} invocationId=${context.invocationId} durationMs=${Date.now() - startedAt}`,

@@ -4,7 +4,7 @@ import { uploadHandler } from "./uploadHandler.ts";
 app.http("upload", {
   methods: ["POST"],
   authLevel: "function",
-  route: "upload",
+  route: "upload/{idUser}/{idPet}",
   handler: uploadHandler,
 });
 

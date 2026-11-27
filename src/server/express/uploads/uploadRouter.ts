@@ -1,5 +1,6 @@
 import express, { type NextFunction, type Request, type Response, type Router } from "express";
 import multer from "multer";
+import { z } from "zod";
 import {
   MAX_FILE_SIZE_BYTES,
   MAX_REQUEST_SIZE_BYTES,
@@ -15,7 +16,7 @@ const upload = multer({
 export const uploadRouter: Router = express.Router();
 
 uploadRouter.post(
-  "/",
+  "/:idUser/:idPet",
   (request, response, next) => {
     const contentLength = Number(request.headers["content-length"] ?? "0");
     if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_SIZE_BYTES) {
@@ -30,6 +31,25 @@ uploadRouter.post(
   upload.single(UPLOAD_FIELD),
   async (request: Request, response: Response) => {
     const startedAt = Date.now();
+
+    const parsedIdUser = z.uuid().safeParse(request.params.idUser);
+    if (!parsedIdUser.success) {
+      console.log(
+        `[upload] rejected status=400 durationMs=${Date.now() - startedAt} reason=invalid-id-user`,
+      );
+      response.status(400).json({ error: "El id de usuario no es válido" });
+      return;
+    }
+
+    const parsedIdPet = z.uuid().safeParse(request.params.idPet);
+    if (!parsedIdPet.success) {
+      console.log(
+        `[upload] rejected status=400 durationMs=${Date.now() - startedAt} reason=invalid-id-pet`,
+      );
+      response.status(400).json({ error: "El id de mascota no es válido" });
+      return;
+    }
+
     const file = request.file;
 
     if (!file) {
@@ -40,7 +60,12 @@ uploadRouter.post(
       return;
     }
 
-    const result = await processImageUpload({ buffer: file.buffer, mimetype: file.mimetype });
+    const result = await processImageUpload({
+      buffer: file.buffer,
+      mimetype: file.mimetype,
+      idUser: parsedIdUser.data,
+      idPet: parsedIdPet.data,
+    });
 
     console.log(`[upload] response status=${result.status} durationMs=${Date.now() - startedAt}`);
 

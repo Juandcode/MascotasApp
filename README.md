@@ -1,8 +1,9 @@
 # backendmascotas
 
-GraphQL API for pet management. It exposes queries and mutations for pets and
-their owners over a PostgreSQL database through Apollo Server and Prisma ORM,
-and it can run both as a standalone Express server and as an Azure Function.
+GraphQL API for pet management. It exposes queries and mutations for lost pets
+and their owners over a PostgreSQL database through Apollo Server and Prisma
+ORM, and it can run both as a standalone Express server and as an Azure
+Function.
 The GraphQL SDL is the source of truth and TypeScript resolver types are
 generated with GraphQL Code Generator.
 
@@ -32,7 +33,7 @@ backendmascotas/
 ├── main.ts                      # Bootstrap: config, listen, graceful shutdown
 ├── src/
 │   ├── server/
-│   │   ├── app.ts               # Express + Apollo wiring and middleware
+│   │   ├── app.ts               # Express + Apollo composition (createServerApp)
 │   │   ├── config.ts            # Server config validation (PORT, uploads)
 │   │   ├── context.ts           # GraphQL context type (MyContext)
 │   │   ├── graphql/
@@ -40,16 +41,18 @@ backendmascotas/
 │   │   │   ├── schema.ts        # Legacy commented-out typeDefs (unused)
 │   │   │   ├── index.ts         # Resolver map + DateTimeResolver
 │   │   │   ├── loggingPlugin.ts # Apollo plugin for console/App Insights logs
-│   │   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.pet)
+│   │   │   ├── queries/PetQuery.ts  # getPets / getPet (context.db.petLost)
 │   │   │   ├── queries/UserQuery.ts # getUsers / getUser (context.db.user)
-│   │   │   ├── mutations/PetMutation.ts  # createPet (context.db.pet)
+│   │   │   ├── mutations/PetMutation.ts  # createLostPet (context.db.petLost)
 │   │   │   └── mutations/UserMutation.ts # createUser (context.db.user)
 │   │   ├── infrastructure/
 │   │   │   ├── prisma.ts        # PrismaClient + pg adapter and .env loading
 │   │   │   └── tigris.ts        # Tigris upload helper (S3-compatible bucket)
-│   │   ├── uploads/
-│   │   │   ├── imageUpload.ts   # Shared validation + Tigris upload logic
-│   │   │   └── uploadRouter.ts  # Standalone POST /api/upload route
+│   │   ├── express/
+│   │   │   ├── indexs.ts        # createHttpServer: middleware, health, routes
+│   │   │   └── uploads/
+│   │   │       ├── imageUpload.ts   # Shared validation + Tigris upload logic
+│   │   │       └── uploadRouter.ts  # Standalone POST /api/upload/:idUser/:idPet route
 │   │   └── functions/
 │   │       ├── index.ts         # Azure Functions entrypoint (registers both functions)
 │   │       ├── handler.ts       # Loads the SDL and supplies the Prisma context
@@ -60,12 +63,12 @@ backendmascotas/
 │       ├── graphql.ts           # Schema/resolver types from codegen (committed)
 │       └── prisma/              # Generated Prisma client (do not edit, gitignored)
 ├── prisma/
-│   ├── schema.prisma            # Data model (User, Pet)
+│   ├── schema.prisma            # Data model (User, PetLost, PhotoPetLost)
 │   └── migrations/              # SQL migrations
 ├── scripts/
 │   └── copy-sdl.mjs             # Copies schema.graphql into dist/ during build
 ├── tests/
-│   ├── pet.test.ts              # Unit tests for pet queries/mutations
+│   ├── pet.test.ts              # Unit tests for PetLost queries/mutations
 │   ├── user.test.ts             # Unit tests for user queries/mutations
 │   ├── upload.test.ts           # Unit tests for the upload endpoint
 │   └── azure-function.test.ts   # HTTP handler integration test
@@ -75,6 +78,7 @@ backendmascotas/
 ├── prisma7.config.ts            # Prisma 7 config (schema, migrations, datasource)
 ├── tsconfig.json
 ├── eslint.config.js
+├── .prettierrc.json             # Prettier configuration
 └── pnpm-workspace.yaml          # allowBuilds for dependency scripts
 ```
 
@@ -119,7 +123,8 @@ There are two independent generation steps:
 - generate schema and resolver types with `typescript` and
   `typescript-resolvers`;
 - use `MyContext` (from `src/server/context.ts`) as the resolver context type;
-- map the GraphQL `Pet` type to the Prisma `Pet` model;
+- map the GraphQL `PetLost` and `User` types to the Prisma `PetLost` and
+  `User` models;
 - map the `DateTime` scalar to JavaScript `Date`.
 
 Do not edit files under `src/generated/` by hand. The Prisma client is
@@ -162,6 +167,7 @@ S3_SECRET_ACCESS_KEY=tu-secret-key
 | `pnpm start:ts`        | Standalone server directly with `tsx`                        |
 | `pnpm typecheck`       | `tsc --noEmit`                                               |
 | `pnpm lint`            | `eslint .`                                                   |
+| `pnpm format`          | Formats the code with Prettier                               |
 | `pnpm test`            | Vitest, single run                                           |
 | `pnpm test:watch`      | Vitest in watch mode                                         |
 | `pnpm prisma:generate` | Generates the Prisma client                                  |
@@ -177,19 +183,30 @@ Current model in `prisma/schema.prisma`:
 
 ```prisma
 model User {
-  id   String @id @default(uuid())
+  id   String    @id @default(uuid())
   name String
-  pets Pet[]
+  pets PetLost[]
 }
 
-model Pet {
-  id        Int      @id @default(autoincrement())
+model PetLost {
+  id        String         @id @default(uuid())
   name      String
-  species   String
-  age       Int?
-  createdAt DateTime @default(now())
-  userId    String?
-  user      User?    @relation(fields: [userId], references: [id])
+  contact   String?
+  color     String?
+  race      String?
+  state     String         @default("perdido")
+  createdAt DateTime       @default(now()) @map("created_at")
+  photos    PhotoPetLost[]
+  userId    String
+  user      User           @relation(fields: [userId], references: [id])
+}
+
+model PhotoPetLost {
+  id        String                      @id @default(uuid())
+  petId     String                      @map("pet_id")
+  pet       PetLost                     @relation(fields: [petId], references: [id], onDelete: Cascade)
+  url       String
+  embedding Unsupported("vector(768)")?
 }
 ```
 
@@ -217,22 +234,35 @@ scalar DateTime
 type User {
   id: ID!
   name: String!
-  pets: [Pet!]!
+  pets: [PetLost!]!
 }
 
-type Pet {
+type PetLost {
   id: ID!
   name: String!
-  species: String!
-  age: Int
+  contact: String
+  color: String
+  race: String
+  state: String!
   createdAt: DateTime!
-  user: User
+  photos: [PhotoPetLost!]!
+  userId: String!
+  user: User!
 }
 
-input CreatePetInput {
+type PhotoPetLost {
+  id: ID!
+  petId: String!
+  pet: PetLost!
+  url: String!
+}
+
+input CreateLostPetInput {
   name: String!
-  species: String!
-  age: Int
+  contact: String
+  color: String
+  race: String
+  userId: String!
 }
 
 input CreateUserInput {
@@ -240,14 +270,14 @@ input CreateUserInput {
 }
 
 type Query {
-  pets: [Pet!]!
-  pet(id: ID!): Pet
+  pets: [PetLost!]!
+  pet(id: ID!): PetLost
   users: [User!]!
   user(id: ID!): User
 }
 
 type Mutation {
-  createPet(input: CreatePetInput!): Pet!
+  createLostPet(input: CreateLostPetInput!): PetLost!
   createUser(input: CreateUserInput!): User!
 }
 ```
@@ -259,24 +289,32 @@ query {
   pets {
     id
     name
-    species
-    age
+    state
     createdAt
+    photos {
+      url
+    }
   }
 }
 
 query {
-  pet(id: "1") {
+  pet(id: "<uuid>") {
     id
     name
-    species
+    state
+    photos {
+      url
+    }
   }
 }
 
 mutation {
-  createPet(input: { name: "Michi", species: "Gato", age: 2 }) {
+  createLostPet(
+    input: { name: "Michi", contact: "+52...", color: "negro", race: "gato", userId: "<uuid>" }
+  ) {
     id
     name
+    state
   }
 }
 ```
@@ -286,15 +324,18 @@ Notes:
 - `DateTime` is implemented with `DateTimeResolver` from `graphql-scalars` and
   is serialized as an ISO-8601 string.
 - Resolvers receive the GraphQL context `MyContext` (`{ db: PrismaClient }`,
-  declared in `src/server/context.ts`) and query through `context.db.pet` or
-  `context.db.user`. They do not import `prisma` directly. Both
+  declared in `src/server/context.ts`) and query through `context.db.petLost`
+  or `context.db.user`. They do not import `prisma` directly. Both
   `src/server/app.ts` and the Azure Functions handler supply `{ db: prisma }`.
 - `getPets` sorts by `createdAt` descending and includes each pet's user.
-- `getPet` converts `id` (GraphQL `ID`, a string) to a number and throws a
-  `GraphQLError` with code `BAD_USER_INPUT` when it is not an integer.
+- `getPet` validates `id` as a UUID and throws a `GraphQLError` with code
+  `BAD_USER_INPUT` when it is not valid.
 - `getUsers` sorts by name ascending and includes each user's pets; `getUser`
   looks users up by their UUID.
-- `Pet.user` is nullable because `Pet.userId` is optional in the database.
+- `PetLost.state` defaults to `"perdido"`; `PetLost.userId` and `PetLost.user`
+  are required.
+- `PhotoPetLost` exposes only `id`, `petId`, `pet`, and `url`; the internal
+  `embedding` (vector) column is not exposed in GraphQL.
 - Resolver signatures are typed from the generated `QueryResolvers` /
   `MutationResolvers`, so run `pnpm generate` after changing the SDL.
 
@@ -305,33 +346,37 @@ The Azure Functions integration only parses JSON bodies, so a GraphQL `Upload`
 scalar would not reach the server; instead there is a dedicated HTTP endpoint
 on both the standalone Express server and the Azure Functions host.
 
-`POST /api/upload` (`multipart/form-data`; `authLevel: "function"` in Azure):
+`POST /api/upload/:idUser/:idPet` (`multipart/form-data`; `authLevel: "function"` in Azure):
 
+- Route parameters `idUser` and `idPet` must be valid UUIDs. Both are validated
+  by both transports; the image is not persisted in PostgreSQL yet.
 - Field name: `file`.
 - Allowed image types: JPEG, PNG, GIF, and WebP. The declared MIME type must
   match the file signature (magic bytes).
 - Maximum size: 15 MB (`15 * 1024 * 1024`).
 - Files are uploaded to the configured Tigris bucket with the key
-  `uploads/<uuid>.<ext>` using `@tigrisdata/storage`.
+  `uploads/<idUser>/<idPet>/<YYYY-MM-DD>_<uuid>.<ext>` using
+  `@tigrisdata/storage`; the date comes before the generated id.
 - Objects are uploaded with public access and a one-year immutable
   `Cache-Control`; the response includes the public `url`.
 - Credentials come from `S3_BUCKET`, `S3_ACCESS_KEY_ID`,
   `S3_SECRET_ACCESS_KEY`, and `S3_ENDPOINT` (see
   [Environment variables](#environment-variables)).
-- Validation lives in `src/server/express/uploads` and is shared by the
-  standalone Express route and the Azure Functions adapter.
+- Validation lives in `src/server/express/uploads/imageUpload.ts` and is shared
+  by the standalone Express route (`uploadRouter.ts`) and the Azure Functions
+  adapter.
 
 Standalone server:
 
 ```bash
-curl -X POST "http://localhost:5000/api/upload" \
+curl -X POST "http://localhost:5000/api/upload/<user-uuid>/<pet-uuid>" \
   -F "file=@mascota.png"
 ```
 
 Azure Functions:
 
 ```bash
-curl -X POST "http://localhost:7071/api/upload?code=<function-key>" \
+curl -X POST "http://localhost:7071/api/upload/<user-uuid>/<pet-uuid>?code=<function-key>" \
   -F "file=@mascota.png"
 ```
 
@@ -339,9 +384,9 @@ Successful response (`201`):
 
 ```json
 {
-  "filename": "259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
-  "key": "uploads/259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
-  "url": "https://<bucket>.t3.storage.dev/uploads/259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "filename": "2026-11-26_259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "key": "uploads/8f1f0b18-6b33-4a1e-9b23-7a9f1a0f0f0f/1b7c2d34-5e6f-4a8b-9c0d-1e2f3a4b5c6d/2026-11-26_259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
+  "url": "https://<bucket>.t3.storage.dev/uploads/8f1f0b18-6b33-4a1e-9b23-7a9f1a0f0f0f/1b7c2d34-5e6f-4a8b-9c0d-1e2f3a4b5c6d/2026-11-26_259ee0dd-67ce-4750-a786-b22b5b5012c8.png",
   "size": 1024,
   "mimetype": "image/png"
 }
@@ -377,7 +422,7 @@ The HTTP function `graphql` is exposed at `POST/GET /api/graphql` with
 from.
 
 The standalone server exposes GraphQL on any path (including `/graphql`) and
-the upload route at `POST /api/upload`. It also exposes `GET /health` for
+the upload route at `POST /api/upload/:idUser/:idPet`. It also exposes `GET /health` for
 readiness checks. `main.ts` only bootstraps the process; `src/server/app.ts`
 composes Express, Apollo, middleware, and routes.
 
@@ -403,7 +448,7 @@ the Core Tools binary, so the first `func start` can take several minutes.
 pnpm test
 ```
 
-Tests live in `tests/`. `pet.test.ts` and `user.test.ts` cover the `Pet` and
+Tests live in `tests/`. `pet.test.ts` and `user.test.ts` cover the `PetLost` and
 `User` queries and mutations with a mocked `{ db }` context, `upload.test.ts`
 covers image validation, storage, and the standalone Express route with a
 mocked `@tigrisdata/storage` client, and `azure-function.test.ts` sends a real
@@ -446,11 +491,12 @@ GraphQL request through the Functions handler.
   `func start` or deploying; otherwise `dist/` and the copied SDL may be
   missing or stale.
 - Uploads require network access to Tigris and valid `S3_*` credentials; a
-  missing variable or storage error makes `POST /api/upload` return `500`.
+  missing variable or storage error makes `POST /api/upload/:idUser/:idPet` return `500`.
 - Objects are uploaded as public by default. If the bucket policy forbids
   public access, adjust `src/server/infrastructure/tigris.ts` and serve private
   objects with signed URLs instead.
-- Uploads are not persisted in PostgreSQL: the database stores no image key or
-  URL yet.
+- The upload endpoint does not persist rows in PostgreSQL yet: it only stores
+  the object in Tigris and returns its URL. `PhotoPetLost` already has `url`
+  (and an internal `embedding`), but no GraphQL mutation creates photo records.
 - `azure-functions-core-tools` downloads the Core Tools binary on its first
   run; the first `func start` can take a while.

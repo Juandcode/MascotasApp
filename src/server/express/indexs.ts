@@ -24,7 +24,7 @@ function resolveErrorStatus(error: unknown): number {
 
 export const createHttpServer = (
   apolloServer: ApolloServer<MyContext>,
-  httpServer: Server,
+  _httpServer: Server,
   app: Express,
 ) => {
   app.disable("x-powered-by");
@@ -44,10 +44,7 @@ export const createHttpServer = (
     cors(),
     express.json(),
     expressMiddleware(apolloServer, {
-      context: async ({ req }) => {
-        const token = req.headers.authorization || "";
-        return { db: prisma };
-      },
+      context: async () => ({ db: prisma }),
     }),
   );
   app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
